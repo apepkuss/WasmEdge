@@ -37,7 +37,7 @@ impl Module {
     }
 
     /// Returns the imports of the [`Module`].
-    pub fn imports_iter<'a>(&'a self) -> impl Iterator<Item = Import<'a>> {
+    pub fn imports_iter(&self) -> impl Iterator<Item = Import<'_>> {
         let size = self.count_of_imports();
         let mut returns = Vec::with_capacity(size as usize);
         unsafe {
