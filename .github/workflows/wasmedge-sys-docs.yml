@@ -1,5 +1,9 @@
 name: wasmedge-sys-docs
 
+concurrency:
+  group: rust-crate-release-${{ github.head_ref }}
+  cancel-in-progress: true
+
 on:
   push:
     tags:
