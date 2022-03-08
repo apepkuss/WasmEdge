@@ -1,13 +1,9 @@
 name: wasmedge-sys-docs
 
-concurrency:
-  group: rust-crate-release-${{ github.head_ref }}
-  cancel-in-progress: true
-
 on:
   push:
-    tags:
-      - "rust/[0-9]+.[0-9]+.[0-9]+*"
+   branches:
+   - feat_docs
 
 # env:
 #   CARGO_INCREMENTAL: 0
@@ -25,8 +21,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-          with: 
-            fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
