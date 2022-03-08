@@ -2,8 +2,6 @@ name: wasmedge-sys-docs
 
 on:
   push:
-    branches:
-      - feat_docs
     tags:
       - "rust/[0-9]+.[0-9]+.[0-9]+*"
 
