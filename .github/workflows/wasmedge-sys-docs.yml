@@ -33,7 +33,7 @@ jobs:
         run: |
           cd bindings/rust/wasmedge-sys
           cargo doc --all --no-deps --target-dir=./target
-          echo "<meta http-equiv=\"refresh\" content=\"0; url=build_wheel\">" > bindings/rust/wasmedge-sys/target/doc/index.html
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=build_wheel\">" > target/doc/index.html
 
       - name: Deploy Docs
         uses: peaceiris/actions-gh-pages@v3
