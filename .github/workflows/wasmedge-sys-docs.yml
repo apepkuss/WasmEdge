@@ -4,12 +4,8 @@ on:
   push:
     branches:
       - feat_docs
-
-# env:
-#   CARGO_INCREMENTAL: 0
-#   CARGO_NET_RETRY: 10
-#   RUSTFLAGS: "-D warnings -W unreachable-pub"
-#   RUSTUP_MAX_RETRIES: 10
+    tags:
+      - "rust/[0-9]+.[0-9]+.[0-9]+*"
 
 jobs:
   rustdoc:
