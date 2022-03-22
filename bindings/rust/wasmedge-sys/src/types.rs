@@ -484,6 +484,8 @@ impl Value {
                     Some(Function {
                         inner: InnerFunc(ctx),
                         registered: true,
+                        name: None,
+                        mod_name: None,
                     })
                 }
             }
