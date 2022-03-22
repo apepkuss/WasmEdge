@@ -801,7 +801,7 @@ impl Config {
         unsafe { wasmedge::WasmEdge_ConfigureStatisticsSetTimeMeasuring(self.inner.0, flag) }
     }
 
-    /// Checks if the cost measuring option turns on or not.
+    /// Checks if the time measuring option turns on or not.
     pub fn is_time_measuring(&self) -> bool {
         unsafe { wasmedge::WasmEdge_ConfigureStatisticsIsTimeMeasuring(self.inner.0) }
     }
