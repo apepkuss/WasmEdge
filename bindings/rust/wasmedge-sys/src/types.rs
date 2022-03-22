@@ -557,12 +557,6 @@ impl From<wasmedge::WasmEdge_Value> for Value {
         }
     }
 }
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        self.ctx.Value == other.ctx.Value && self.ctx.Type == other.ctx.Type
-    }
-}
-impl Eq for Value {}
 
 #[cfg(test)]
 mod tests {
