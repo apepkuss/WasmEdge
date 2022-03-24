@@ -780,7 +780,7 @@ mod tests {
     use super::Store;
     use crate::{
         instance::{Function, Global, GlobalType, MemType, Memory, Table, TableType},
-        types::Value,
+        types::WasmValue,
         Config, Executor, FuncType, ImportObject, Mutability, RefType, ValType, Vm,
     };
     use std::{
@@ -840,8 +840,7 @@ mod tests {
             let mem_ty = result.unwrap();
             let result = Memory::create(&mem_ty);
             assert!(result.is_ok());
-            let memory = result.unwrap();
-            memory
+            result.unwrap()
         };
         import.add_memory("mem", memory);
 
@@ -849,7 +848,7 @@ mod tests {
         let result = GlobalType::create(ValType::F32, Mutability::Const);
         assert!(result.is_ok());
         let ty = result.unwrap();
-        let result = Global::create(&ty, Value::from_f32(3.5));
+        let result = Global::create(&ty, WasmValue::from_f32(3.5));
         assert!(result.is_ok());
         let global = result.unwrap();
         import.add_global("global", global);
@@ -922,7 +921,7 @@ mod tests {
             &mut store,
             "extern_module",
             "add",
-            vec![Value::from_i32(12), Value::from_i32(21)],
+            vec![WasmValue::from_i32(12), WasmValue::from_i32(21)],
         );
         assert!(result.is_ok());
         let returns = result.unwrap();
@@ -932,7 +931,7 @@ mod tests {
             &mut store,
             "extern_module",
             "add",
-            vec![Value::from_i32(12), Value::from_i32(21)],
+            vec![WasmValue::from_i32(12), WasmValue::from_i32(21)],
         );
         assert!(second_run.is_ok());
     }
@@ -995,7 +994,7 @@ mod tests {
                 &mut store,
                 "extern_module",
                 "add",
-                vec![Value::from_i32(12), Value::from_i32(21)],
+                vec![WasmValue::from_i32(12), WasmValue::from_i32(21)],
             );
             assert!(result.is_ok());
             let returns = result.unwrap();
@@ -1115,7 +1114,7 @@ mod tests {
         assert_eq!(return_types, [ValType::I32]);
     }
 
-    fn real_add(inputs: Vec<Value>) -> Result<Vec<Value>, u8> {
+    fn real_add(inputs: Vec<WasmValue>) -> Result<Vec<WasmValue>, u8> {
         if inputs.len() != 2 {
             return Err(1);
         }
@@ -1134,6 +1133,6 @@ mod tests {
 
         let c = a + b;
 
-        Ok(vec![Value::from_i32(c)])
+        Ok(vec![WasmValue::from_i32(c)])
     }
 }

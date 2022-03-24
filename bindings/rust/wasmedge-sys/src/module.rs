@@ -50,7 +50,7 @@ impl Module {
             .into_iter()
             .map(|ctx| Import {
                 inner: InnerImport(ctx),
-                module: &self,
+                module: self,
             })
             .collect()
     }
@@ -74,7 +74,7 @@ impl Module {
             .into_iter()
             .map(|ctx| Export {
                 inner: InnerExport(ctx),
-                module: &self,
+                module: self,
             })
             .collect()
     }

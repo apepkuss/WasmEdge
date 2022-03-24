@@ -315,7 +315,7 @@ mod tests {
     use super::*;
     use crate::{
         Config, Executor, FuncType, GlobalType, MemType, Mutability, RefType, Statistics, Store,
-        TableType, ValType, Value, Vm,
+        TableType, ValType, Vm, WasmValue,
     };
     use std::{
         sync::{Arc, Mutex},
@@ -365,7 +365,7 @@ mod tests {
         let result = GlobalType::create(ValType::I32, Mutability::Const);
         assert!(result.is_ok());
         let global_ty = result.unwrap();
-        let result = Global::create(&global_ty, Value::from_i32(666));
+        let result = Global::create(&global_ty, WasmValue::from_i32(666));
         assert!(result.is_ok());
         let host_global = result.unwrap();
         // add the global into import_obj module
@@ -579,8 +579,7 @@ mod tests {
             let mem_ty = result.unwrap();
             let result = Memory::create(&mem_ty);
             assert!(result.is_ok());
-            let memory = result.unwrap();
-            memory
+            result.unwrap()
         };
         import.add_memory("memory", memory);
 
@@ -588,7 +587,7 @@ mod tests {
         let result = GlobalType::create(ValType::F32, Mutability::Const);
         assert!(result.is_ok());
         let ty = result.unwrap();
-        let result = Global::create(&ty, Value::from_f32(3.5));
+        let result = Global::create(&ty, WasmValue::from_f32(3.5));
         assert!(result.is_ok());
         let global = result.unwrap();
         import.add_global("global", global);
@@ -654,7 +653,7 @@ mod tests {
         handle.join().unwrap();
     }
 
-    fn real_add(inputs: Vec<Value>) -> Result<Vec<Value>, u8> {
+    fn real_add(inputs: Vec<WasmValue>) -> Result<Vec<WasmValue>, u8> {
         if inputs.len() != 2 {
             return Err(1);
         }
@@ -673,6 +672,6 @@ mod tests {
 
         let c = a + b;
 
-        Ok(vec![Value::from_i32(c)])
+        Ok(vec![WasmValue::from_i32(c)])
     }
 }
