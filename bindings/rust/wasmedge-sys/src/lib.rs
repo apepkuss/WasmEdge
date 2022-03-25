@@ -89,7 +89,7 @@ pub use vm::Vm;
 /// The WasmEdge result type.
 pub type WasmEdgeResult<T> = Result<T, error::WasmEdgeError>;
 
-pub type HostFunc = Box<dyn Fn(Vec<WasmValue>) -> Result<Vec<WasmValue>, u8> + Send>;
+pub type HostFunc = Box<dyn Fn(Vec<WasmValue>) -> Result<Vec<WasmValue>, u8> + Send + Sync>;
 
 lazy_static! {
     static ref HOST_FUNCS: Arc<Mutex<HashMap<usize, HostFunc>>> =
