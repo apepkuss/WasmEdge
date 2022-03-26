@@ -5,8 +5,10 @@
 
 use crate::{
     error::{GlobalError, WasmEdgeError},
-    types::{Mutability, WasmValueType},
-    wasmedge, WasmEdgeResult, WasmValue,
+    types::WasmValueType,
+    wasmedge,
+    wasmedge_types::Mutability,
+    WasmEdgeResult, WasmValue,
 };
 
 #[derive(Debug)]
@@ -32,7 +34,7 @@ impl GlobalType {
         let ctx = unsafe {
             wasmedge::WasmEdge_GlobalTypeCreate(
                 wasmedge::WasmEdge_ValType::from(val_ty),
-                wasmedge::WasmEdge_Mutability::from(mutable),
+                mutable.into(),
             )
         };
         match ctx.is_null() {
@@ -132,7 +134,8 @@ impl Global {
     /// # Example
     ///
     /// ```
-    /// use wasmedge_sys::{Global, GlobalType, WasmValueType, Mutability, WasmValue};
+    /// use wasmedge_sys::{Global, GlobalType, WasmValueType, WasmValue};
+    /// use wasmedge_types::Mutability;
     ///
     /// // create a GlobalType instance
     /// let ty = GlobalType::create(WasmValueType::F32, Mutability::Var).expect("fail to create a GlobalType");
@@ -167,7 +170,7 @@ impl Drop for Global {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Mutability, WasmValueType};
+    use crate::{wasmedge_types::Mutability, WasmValueType};
     use std::{
         sync::{Arc, Mutex},
         thread,
