@@ -2,7 +2,8 @@
 
 use crate::{
     wasmedge::{WasmEdge_Result, WasmEdge_ResultGetCode, WasmEdge_ResultOK},
-    ExternalInstanceType, WasmEdgeResult,
+    wasmedge_types::ExternalInstanceType,
+    WasmEdgeResult,
 };
 use thiserror::Error;
 
