@@ -7,10 +7,11 @@
 
 use crate::{
     error::{check, TableError, WasmEdgeError},
-    types::{WasmRefType, WasmValue},
+    types::WasmValue,
     wasmedge, WasmEdgeResult,
 };
 use std::ops::RangeInclusive;
+use wasmedge_types::RefType;
 
 /// Struct of WasmEdge Table.
 ///
@@ -34,9 +35,11 @@ impl Table {
     /// # Example
     ///
     /// ```
-    /// use wasmedge_sys::{WasmRefType, TableType, Table};
+    /// use wasmedge_sys::{TableType, Table};
+    /// use wasmedge_types::RefType;
+    ///
     /// // create a TableType instance
-    /// let ty = TableType::create(WasmRefType::FuncRef, 10..=20).expect("fail to create a TableType");
+    /// let ty = TableType::create(RefType::FuncRef, 10..=20).expect("fail to create a TableType");
     ///
     /// // create a Table instance
     /// let table = Table::create(&ty).expect("fail to create a Table");
@@ -117,10 +120,11 @@ impl Table {
     /// # Example
     ///
     /// ```
-    /// use wasmedge_sys::{WasmRefType, TableType, Table};
+    /// use wasmedge_sys::{TableType, Table};
+    /// use wasmedge_types::RefType;
     ///
     /// // create a TableType instance and a Table
-    /// let ty = TableType::create(WasmRefType::FuncRef, 10..=20).expect("fail to create a TableType");
+    /// let ty = TableType::create(RefType::FuncRef, 10..=20).expect("fail to create a TableType");
     /// let table = Table::create(&ty).expect("fail to create a Table");
     ///
     /// // check capacity
@@ -197,13 +201,8 @@ impl TableType {
     /// let ty = TableType::create(WasmRefType::FuncRef, 10..=20).expect("fail to create a TableType");
     /// ```
     ///
-    pub fn create(elem_ty: WasmRefType, limit: RangeInclusive<u32>) -> WasmEdgeResult<Self> {
-        let ctx = unsafe {
-            wasmedge::WasmEdge_TableTypeCreate(
-                wasmedge::WasmEdge_RefType::from(elem_ty),
-                wasmedge::WasmEdge_Limit::from(limit),
-            )
-        };
+    pub fn create(elem_ty: RefType, limit: RangeInclusive<u32>) -> WasmEdgeResult<Self> {
+        let ctx = unsafe { wasmedge::WasmEdge_TableTypeCreate(elem_ty.into(), limit.into()) };
         match ctx.is_null() {
             true => Err(WasmEdgeError::TableTypeCreate),
             false => Ok(Self {
@@ -214,7 +213,7 @@ impl TableType {
     }
 
     /// Returns the element type.
-    pub fn elem_ty(&self) -> WasmRefType {
+    pub fn elem_ty(&self) -> RefType {
         let ty = unsafe { wasmedge::WasmEdge_TableTypeGetRefType(self.inner.0) };
         ty.into()
     }
@@ -224,10 +223,11 @@ impl TableType {
     /// # Example
     ///
     /// ```
-    /// use wasmedge_sys::{WasmRefType, TableType};
+    /// use wasmedge_sys::TableType;
+    /// use wasmedge_types::RefType;
     ///
     /// // create a TableType instance
-    /// let ty = TableType::create(WasmRefType::FuncRef, 10..=20).expect("fail to create a TableType");
+    /// let ty = TableType::create(RefType::FuncRef, 10..=20).expect("fail to create a TableType");
     ///
     /// // check limit
     /// assert_eq!(ty.limit(), 10..=20);
@@ -246,23 +246,24 @@ unsafe impl Sync for InnerTableType {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{FuncType, Function, WasmRefType, WasmValueType};
+    use crate::{FuncType, Function, WasmValueType};
     use std::{
         sync::{Arc, Mutex},
         thread,
     };
+    use wasmedge_types::RefType;
 
     #[test]
     fn test_table_type() {
         // create a TableType instance
-        let result = TableType::create(WasmRefType::FuncRef, 10..=20);
+        let result = TableType::create(RefType::FuncRef, 10..=20);
         assert!(result.is_ok());
         let ty = result.unwrap();
         assert!(!ty.inner.0.is_null());
         assert!(!ty.registered);
 
         // check element type
-        assert_eq!(ty.elem_ty(), WasmRefType::FuncRef);
+        assert_eq!(ty.elem_ty(), RefType::FuncRef);
         // check limit
         assert_eq!(ty.limit(), 10..=20);
     }
@@ -270,7 +271,7 @@ mod tests {
     #[test]
     fn test_table() {
         // create a TableType instance
-        let result = TableType::create(WasmRefType::FuncRef, 10..=20);
+        let result = TableType::create(RefType::FuncRef, 10..=20);
         assert!(result.is_ok());
         let ty = result.unwrap();
 
@@ -291,7 +292,7 @@ mod tests {
 
         // check limit and element type
         assert_eq!(ty.limit(), 10..=20);
-        assert_eq!(ty.elem_ty(), WasmRefType::FuncRef);
+        assert_eq!(ty.elem_ty(), RefType::FuncRef);
 
         // grow the capacity of table
         let result = table.grow(5);
@@ -312,7 +313,7 @@ mod tests {
         let mut host_func = result.unwrap();
 
         // create a TableType instance
-        let result = TableType::create(WasmRefType::FuncRef, 10..=20);
+        let result = TableType::create(RefType::FuncRef, 10..=20);
         assert!(result.is_ok());
         let ty = result.unwrap();
 
@@ -355,7 +356,7 @@ mod tests {
     #[test]
     fn test_table_send() {
         // create a TableType instance
-        let result = TableType::create(WasmRefType::FuncRef, 10..=20);
+        let result = TableType::create(RefType::FuncRef, 10..=20);
         assert!(result.is_ok());
         let ty = result.unwrap();
 
@@ -379,7 +380,7 @@ mod tests {
 
             // check limit and element type
             assert_eq!(ty.limit(), 10..=20);
-            assert_eq!(ty.elem_ty(), WasmRefType::FuncRef);
+            assert_eq!(ty.elem_ty(), RefType::FuncRef);
         });
 
         handle.join().unwrap();
@@ -388,7 +389,7 @@ mod tests {
     #[test]
     fn test_table_sync() {
         // create a TableType instance
-        let result = TableType::create(WasmRefType::FuncRef, 10..=20);
+        let result = TableType::create(RefType::FuncRef, 10..=20);
         assert!(result.is_ok());
         let ty = result.unwrap();
 
@@ -415,7 +416,7 @@ mod tests {
 
             // check limit and element type
             assert_eq!(ty.limit(), 10..=20);
-            assert_eq!(ty.elem_ty(), WasmRefType::FuncRef);
+            assert_eq!(ty.elem_ty(), RefType::FuncRef);
         });
 
         handle.join().unwrap();
