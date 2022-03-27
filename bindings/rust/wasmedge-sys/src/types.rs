@@ -94,44 +94,6 @@ impl From<wasmedge::WasmEdge_ValType> for WasmValueType {
     }
 }
 
-/// Defines WasmEdge AOT compiler optimization level.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u32)]
-pub enum CompilerOptimizationLevel {
-    /// Disable as many optimizations as possible.
-    O0 = wasmedge::WasmEdge_CompilerOptimizationLevel_O0,
-
-    /// Optimize quickly without destroying debuggability.
-    O1 = wasmedge::WasmEdge_CompilerOptimizationLevel_O1,
-
-    /// Optimize for fast execution as much as possible without triggering
-    /// significant incremental compile time or code size growth.
-    O2 = wasmedge::WasmEdge_CompilerOptimizationLevel_O2,
-
-    ///  Optimize for fast execution as much as possible.
-    O3 = wasmedge::WasmEdge_CompilerOptimizationLevel_O3,
-
-    ///  Optimize for small code size as much as possible without triggering
-    ///  significant incremental compile time or execution time slowdowns.
-    Os = wasmedge::WasmEdge_CompilerOptimizationLevel_Os,
-
-    /// Optimize for small code size as much as possible.
-    Oz = wasmedge::WasmEdge_CompilerOptimizationLevel_Oz,
-}
-impl From<u32> for CompilerOptimizationLevel {
-    fn from(val: u32) -> CompilerOptimizationLevel {
-        match val {
-            0 => CompilerOptimizationLevel::O0,
-            1 => CompilerOptimizationLevel::O1,
-            2 => CompilerOptimizationLevel::O2,
-            3 => CompilerOptimizationLevel::O3,
-            4 => CompilerOptimizationLevel::Os,
-            5 => CompilerOptimizationLevel::Oz,
-            _ => panic!("Unknown CompilerOptimizationLevel value: {}", val),
-        }
-    }
-}
-
 /// Defines WasmEdge AOT compiler output binary format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
