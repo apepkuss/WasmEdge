@@ -3,11 +3,12 @@
 use crate::{
     error::{FuncError, WasmEdgeError},
     types::WasmValue,
-    wasmedge, WasmEdgeResult, WasmValueType, HOST_FUNCS,
+    wasmedge, WasmEdgeResult, HOST_FUNCS,
 };
 use core::ffi::c_void;
 use rand::Rng;
 use std::convert::TryInto;
+use wasmedge_types::ValType;
 
 extern "C" fn wraper_fn(
     key_ptr: *mut c_void,
@@ -91,20 +92,21 @@ impl Function {
     /// the `create_binding` method.
     ///
     /// ```rust
-    /// use wasmedge_sys::{FuncType, Function, WasmValueType, WasmValue, WasmEdgeResult};
+    /// use wasmedge_sys::{FuncType, Function, WasmValue, WasmEdgeResult};
+    /// use wasmedge_types::ValType;
     ///
     /// fn real_add(inputs: Vec<WasmValue>) -> Result<Vec<WasmValue>, u8> {
     ///     if inputs.len() != 2 {
     ///         return Err(1);
     ///     }
     ///
-    ///     let a = if inputs[0].ty() == WasmValueType::I32 {
+    ///     let a = if inputs[0].ty() == ValType::I32 {
     ///         inputs[0].to_i32()
     ///     } else {
     ///         return Err(2);
     ///     };
     ///
-    ///     let b = if inputs[1].ty() == WasmValueType::I32 {
+    ///     let b = if inputs[1].ty() == ValType::I32 {
     ///         inputs[1].to_i32()
     ///     } else {
     ///         return Err(3);
@@ -116,7 +118,7 @@ impl Function {
     /// }
     ///
     /// // create a FuncType
-    /// let func_ty = FuncType::create(vec![WasmValueType::I32; 2], vec![WasmValueType::I32]).expect("fail to create a FuncType");
+    /// let func_ty = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32]).expect("fail to create a FuncType");
     ///
     /// // create a Function instance
     /// let func = Function::create(&func_ty, Box::new(real_add), 0).expect("fail to create a Function instance");
@@ -233,11 +235,12 @@ impl FuncType {
     /// # Example
     ///
     /// ```rust
-    /// use wasmedge_sys::{FuncType, WasmValueType};
+    /// use wasmedge_sys::FuncType;
+    /// use wasmedge_types::ValType;
     ///
-    /// let func_ty = FuncType::create(vec![WasmValueType::I32;2], vec![WasmValueType::I32]).expect("fail to create a FuncType");
+    /// let func_ty = FuncType::create(vec![ValType::I32;2], vec![ValType::I32]).expect("fail to create a FuncType");
     /// ```
-    pub fn create<I: IntoIterator<Item = WasmValueType>, R: IntoIterator<Item = WasmValueType>>(
+    pub fn create<I: IntoIterator<Item = ValType>, R: IntoIterator<Item = ValType>>(
         args: I,
         returns: R,
     ) -> WasmEdgeResult<Self> {
@@ -254,7 +257,7 @@ impl FuncType {
             wasmedge::WasmEdge_FunctionTypeCreate(
                 param_tys.as_ptr() as *const _,
                 param_tys.len() as u32,
-                ret_tys.as_ptr() as *const u32,
+                ret_tys.as_ptr() as *const _,
                 ret_tys.len() as u32,
             )
         };
@@ -273,7 +276,7 @@ impl FuncType {
     }
 
     /// Returns an Iterator of the arguments of a [Function].
-    pub fn params_type_iter(&self) -> impl Iterator<Item = WasmValueType> {
+    pub fn params_type_iter(&self) -> impl Iterator<Item = ValType> {
         let len = self.params_len();
         let mut types = Vec::with_capacity(len);
         unsafe {
@@ -294,7 +297,7 @@ impl FuncType {
     }
 
     /// Returns an Iterator of the return types of a [Function].
-    pub fn returns_type_iter(&self) -> impl Iterator<Item = WasmValueType> {
+    pub fn returns_type_iter(&self) -> impl Iterator<Item = ValType> {
         let len = self.returns_len();
         let mut types = Vec::with_capacity(len);
         unsafe {
@@ -312,6 +315,45 @@ impl Drop for FuncType {
         }
     }
 }
+impl From<wasmedge_types::FuncType> for FuncType {
+    fn from(ty: wasmedge_types::FuncType) -> Self {
+        let param_tys: Vec<_> = match ty.args() {
+            Some(args) => args.iter().map(|&x| x.into()).collect(),
+            None => Vec::new(),
+        };
+        let ret_tys: Vec<_> = match ty.returns() {
+            Some(returns) => returns.iter().map(|&x| x.into()).collect(),
+            None => Vec::new(),
+        };
+
+        FuncType::create(param_tys, ret_tys).expect("[wasmedge-sys] Failed to convert wasmedge_types::FuncType into wasmedge_sys::FuncType.")
+    }
+}
+impl From<FuncType> for wasmedge_types::FuncType {
+    fn from(ty: FuncType) -> Self {
+        let args = if ty.params_len() > 0 {
+            let mut args = Vec::with_capacity(ty.params_len());
+            for ty in ty.params_type_iter() {
+                args.push(ty.into());
+            }
+            Some(args)
+        } else {
+            None
+        };
+
+        let returns = if ty.returns_len() > 0 {
+            let mut returns = Vec::with_capacity(ty.returns_len());
+            for ty in ty.returns_type_iter() {
+                returns.push(ty.into());
+            }
+            Some(returns)
+        } else {
+            None
+        };
+
+        wasmedge_types::FuncType::new(args, returns)
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct InnerFuncType(pub(crate) *mut wasmedge::WasmEdge_FunctionTypeContext);
@@ -321,30 +363,27 @@ unsafe impl Sync for InnerFuncType {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Executor, ImportObject, Store, WasmValueType};
+    use crate::{Executor, ImportObject, Store};
     use std::{
         sync::{Arc, Mutex},
         thread,
     };
+    use wasmedge_types::ValType;
 
     #[test]
     fn test_func_type() {
         // test FuncType with args and returns
         {
             let param_tys = vec![
-                WasmValueType::I32,
-                WasmValueType::I64,
-                WasmValueType::F32,
-                WasmValueType::F64,
-                WasmValueType::V128,
-                WasmValueType::ExternRef,
+                ValType::I32,
+                ValType::I64,
+                ValType::F32,
+                ValType::F64,
+                ValType::V128,
+                ValType::ExternRef,
             ];
             let param_len = param_tys.len();
-            let ret_tys = vec![
-                WasmValueType::FuncRef,
-                WasmValueType::ExternRef,
-                WasmValueType::V128,
-            ];
+            let ret_tys = vec![ValType::FuncRef, ValType::ExternRef, ValType::V128];
             let ret_len = ret_tys.len();
 
             // create FuncType
@@ -358,12 +397,12 @@ mod tests {
             assert_eq!(
                 param_tys,
                 vec![
-                    WasmValueType::I32,
-                    WasmValueType::I64,
-                    WasmValueType::F32,
-                    WasmValueType::F64,
-                    WasmValueType::V128,
-                    WasmValueType::ExternRef,
+                    ValType::I32,
+                    ValType::I64,
+                    ValType::F32,
+                    ValType::F64,
+                    ValType::V128,
+                    ValType::ExternRef,
                 ]
             );
 
@@ -372,11 +411,7 @@ mod tests {
             let return_tys = func_ty.returns_type_iter().collect::<Vec<_>>();
             assert_eq!(
                 return_tys,
-                vec![
-                    WasmValueType::FuncRef,
-                    WasmValueType::ExternRef,
-                    WasmValueType::V128
-                ]
+                vec![ValType::FuncRef, ValType::ExternRef, ValType::V128]
             );
         }
 
@@ -395,7 +430,7 @@ mod tests {
     #[test]
     fn test_func() {
         // create a FuncType
-        let result = FuncType::create(vec![WasmValueType::I32; 2], vec![WasmValueType::I32]);
+        let result = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32]);
         assert!(result.is_ok());
         let func_ty = result.unwrap();
         // create a host function
@@ -411,18 +446,18 @@ mod tests {
         // check parameters
         assert_eq!(ty.params_len(), 2);
         let param_tys = ty.params_type_iter().collect::<Vec<_>>();
-        assert_eq!(param_tys, vec![WasmValueType::I32; 2]);
+        assert_eq!(param_tys, vec![ValType::I32; 2]);
 
         // check returns
         assert_eq!(ty.returns_len(), 1);
         let return_tys = ty.returns_type_iter().collect::<Vec<_>>();
-        assert_eq!(return_tys, vec![WasmValueType::I32]);
+        assert_eq!(return_tys, vec![ValType::I32]);
     }
 
     #[test]
     fn test_func_call() {
         // create a FuncType
-        let result = FuncType::create(vec![WasmValueType::I32; 2], vec![WasmValueType::I32]);
+        let result = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32]);
         assert!(result.is_ok());
         let func_ty = result.unwrap();
         let result = Function::create(&func_ty, Box::new(real_add), 0);
@@ -461,7 +496,7 @@ mod tests {
     #[test]
     fn test_func_send() {
         // create a FuncType
-        let result = FuncType::create(vec![WasmValueType::I32; 2], vec![WasmValueType::I32]);
+        let result = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32]);
         assert!(result.is_ok());
         let func_ty = result.unwrap();
         // create a host function
@@ -478,12 +513,12 @@ mod tests {
             // check parameters
             assert_eq!(ty.params_len(), 2);
             let param_tys = ty.params_type_iter().collect::<Vec<_>>();
-            assert_eq!(param_tys, vec![WasmValueType::I32; 2]);
+            assert_eq!(param_tys, vec![ValType::I32; 2]);
 
             // check returns
             assert_eq!(ty.returns_len(), 1);
             let return_tys = ty.returns_type_iter().collect::<Vec<_>>();
-            assert_eq!(return_tys, vec![WasmValueType::I32]);
+            assert_eq!(return_tys, vec![ValType::I32]);
         });
 
         handle.join().unwrap()
@@ -492,7 +527,7 @@ mod tests {
     #[test]
     fn test_func_sync() {
         // create a FuncType
-        let result = FuncType::create(vec![WasmValueType::I32; 2], vec![WasmValueType::I32]);
+        let result = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32]);
         assert!(result.is_ok());
         let func_ty = result.unwrap();
         // create a host function
@@ -514,12 +549,12 @@ mod tests {
             // check parameters
             assert_eq!(ty.params_len(), 2);
             let param_tys = ty.params_type_iter().collect::<Vec<_>>();
-            assert_eq!(param_tys, vec![WasmValueType::I32; 2]);
+            assert_eq!(param_tys, vec![ValType::I32; 2]);
 
             // check returns
             assert_eq!(ty.returns_len(), 1);
             let return_tys = ty.returns_type_iter().collect::<Vec<_>>();
-            assert_eq!(return_tys, vec![WasmValueType::I32]);
+            assert_eq!(return_tys, vec![ValType::I32]);
         });
 
         handle.join().unwrap();
@@ -532,13 +567,13 @@ mod tests {
             return Err(1);
         }
 
-        let a = if input[0].ty() == WasmValueType::I32 {
+        let a = if input[0].ty() == ValType::I32 {
             input[0].to_i32()
         } else {
             return Err(2);
         };
 
-        let b = if input[1].ty() == WasmValueType::I32 {
+        let b = if input[1].ty() == ValType::I32 {
             input[1].to_i32()
         } else {
             return Err(3);
