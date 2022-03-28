@@ -5,7 +5,6 @@
 
 use crate::{
     error::{GlobalError, WasmEdgeError},
-    types::WasmValueType,
     wasmedge, WasmEdgeResult, WasmValue,
 };
 use wasmedge_types::{Mutability, ValType};
@@ -29,13 +28,8 @@ impl GlobalType {
     /// # Errors
     ///
     /// If fail to create a new [GlobalType], then an error is returned.
-    pub fn create(val_ty: WasmValueType, mutable: Mutability) -> WasmEdgeResult<Self> {
-        let ctx = unsafe {
-            wasmedge::WasmEdge_GlobalTypeCreate(
-                wasmedge::WasmEdge_ValType::from(val_ty),
-                mutable.into(),
-            )
-        };
+    pub fn create(val_ty: ValType, mutable: Mutability) -> WasmEdgeResult<Self> {
+        let ctx = unsafe { wasmedge::WasmEdge_GlobalTypeCreate(val_ty.into(), mutable.into()) };
         match ctx.is_null() {
             true => Err(WasmEdgeError::GlobalTypeCreate),
             false => Ok(Self {
@@ -145,11 +139,11 @@ impl Global {
     /// # Example
     ///
     /// ```
-    /// use wasmedge_sys::{Global, GlobalType, WasmValueType, WasmValue};
-    /// use wasmedge_types::Mutability;
+    /// use wasmedge_sys::{Global, GlobalType, WasmValue};
+    /// use wasmedge_types::{ValType, Mutability};
     ///
     /// // create a GlobalType instance
-    /// let ty = GlobalType::create(WasmValueType::F32, Mutability::Var).expect("fail to create a GlobalType");
+    /// let ty = GlobalType::create(ValType::F32, Mutability::Var).expect("fail to create a GlobalType");
     /// // create a Global instance
     /// let mut global = Global::create(&ty, WasmValue::from_f32(3.1415)).expect("fail to create a Global");
     ///
@@ -181,7 +175,6 @@ impl Drop for Global {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::WasmValueType;
     use std::{
         sync::{Arc, Mutex},
         thread,
@@ -191,7 +184,7 @@ mod tests {
     #[test]
     fn test_global_type() {
         // create a GlobalType instance
-        let result = GlobalType::create(WasmValueType::I32, Mutability::Const);
+        let result = GlobalType::create(ValType::I32, Mutability::Const);
         assert!(result.is_ok());
         let global_ty = result.unwrap();
         assert!(!global_ty.inner.0.is_null());
@@ -206,7 +199,7 @@ mod tests {
     #[test]
     fn test_global_const_i32() {
         // create a GlobalType instance
-        let result = GlobalType::create(WasmValueType::I32, Mutability::Const);
+        let result = GlobalType::create(ValType::I32, Mutability::Const);
         assert!(result.is_ok());
         let ty = result.unwrap();
         assert!(!ty.inner.0.is_null());
@@ -234,7 +227,7 @@ mod tests {
     #[test]
     fn test_global_var_f32() {
         // create a GlobalType instance
-        let result = GlobalType::create(WasmValueType::F32, Mutability::Var);
+        let result = GlobalType::create(ValType::F32, Mutability::Var);
         assert!(result.is_ok());
         let ty = result.unwrap();
         assert!(!ty.inner.0.is_null());
@@ -264,7 +257,7 @@ mod tests {
     fn test_global_conflict() {
         {
             // create a GlobalType instance
-            let result = GlobalType::create(WasmValueType::F32, Mutability::Var);
+            let result = GlobalType::create(ValType::F32, Mutability::Var);
             assert!(result.is_ok());
             let ty = result.unwrap();
             assert!(!ty.inner.0.is_null());
@@ -276,7 +269,7 @@ mod tests {
 
         {
             // create a GlobalType instance
-            let result = GlobalType::create(WasmValueType::F32, Mutability::Var);
+            let result = GlobalType::create(ValType::F32, Mutability::Var);
             assert!(result.is_ok());
             let ty = result.unwrap();
             assert!(!ty.inner.0.is_null());
@@ -302,7 +295,7 @@ mod tests {
     fn test_global_send() {
         {
             // create a GlobalType instance
-            let result = GlobalType::create(WasmValueType::I32, Mutability::Const);
+            let result = GlobalType::create(ValType::I32, Mutability::Const);
             assert!(result.is_ok());
             let global_ty = result.unwrap();
 
@@ -321,7 +314,7 @@ mod tests {
 
         {
             // create a GlobalType instance
-            let result = GlobalType::create(WasmValueType::I32, Mutability::Const);
+            let result = GlobalType::create(ValType::I32, Mutability::Const);
             assert!(result.is_ok());
             let global_ty = result.unwrap();
 
@@ -342,7 +335,7 @@ mod tests {
     #[test]
     fn test_global_sync() {
         // create a GlobalType instance
-        let result = GlobalType::create(WasmValueType::I32, Mutability::Const);
+        let result = GlobalType::create(ValType::I32, Mutability::Const);
         assert!(result.is_ok());
         let global_ty = result.unwrap();
 
