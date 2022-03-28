@@ -23,7 +23,7 @@ pub struct GlobalType {
     pub(crate) registered: bool,
 }
 impl GlobalType {
-    /// Create a new [GlobalType] to be associated with the given [WasmValueType](crate::WasmValueType) and [Mutability](crate::Mutability).
+    /// Create a new [GlobalType] to be associated with the given [ValType](wasmedge_types::ValType) and [Mutability](wasmedge_types::Mutability).
     ///
     /// # Errors
     ///
@@ -45,7 +45,7 @@ impl GlobalType {
         val.into()
     }
 
-    /// Returns the [Mutability](crate::Mutability) value of the [GlobalType].
+    /// Returns the [Mutability](wasmedge_types::Mutability) value of the [GlobalType].
     pub fn mutability(&self) -> Mutability {
         let val = unsafe { wasmedge::WasmEdge_GlobalTypeGetMutability(self.inner.0) };
         val.into()
@@ -85,9 +85,9 @@ pub struct Global {
     pub(crate) registered: bool,
 }
 impl Global {
-    /// Creates a new [Global] instance to be associated with the given [GlobalType] and [Value](crate::Value).
+    /// Creates a new [Global] instance to be associated with the given [GlobalType] and [WasmValue](crate::WasmValue).
     ///
-    /// The type of the given [Value](crate::Value) must be matched with [GlobalType]; otherwise, it causes a failure. For example, `Value::I32(520)` conflicts with a [GlobalType] with a value type defined as `WasmValueType::F32`.
+    /// The type of the given [WasmValue](crate::WasmValue) must be matched with [GlobalType]; otherwise, it causes a failure. For example, `Value::I32(520)` conflicts with a [GlobalType] with a value type defined as `WasmValueType::F32`.
     ///
     /// # Errors
     ///
