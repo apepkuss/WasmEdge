@@ -127,6 +127,25 @@ impl Module {
             false => exports[0].ty().ok(),
         }
     }
+
+    /// Serializes this module to a vector of bytes.
+    pub fn serialize(&self) -> WasmEdgeResult<Vec<u8>> {
+        self.inner.serialize()
+    }
+
+    /// Deserializes an in-memory compiled module previously created.
+    ///
+    /// # Argument
+    ///
+    /// `bytes` - A in-memory WASM bytes.
+    ///
+    /// # Error
+    ///
+    /// If fail to desesialize the module, then an error is returned.
+    pub fn deserialize(bytes: impl AsRef<[u8]>) -> WasmEdgeResult<Self> {
+        let inner = sys::Module::deserialize(bytes.as_ref())?;
+        Ok(Self { inner })
+    }
 }
 
 /// Defines the types of the imported instances.
