@@ -4,7 +4,7 @@ use super::ffi;
 use crate::{
     error::{ExportError, ImportError, WasmEdgeError},
     types::WasmEdgeLimit,
-    WasmEdgeResult,
+    Loader, WasmEdgeResult,
 };
 use std::{borrow::Cow, ffi::CStr};
 use wasmedge_types::{
@@ -73,6 +73,26 @@ impl Module {
                 module: self,
             })
             .collect()
+    }
+
+    /// Serializes this module to a vector of bytes.
+    pub fn serialize(&self) -> WasmEdgeResult<Vec<u8>> {
+        unimplemented!()
+    }
+
+    /// Deserializes an in-memory compiled module previously created.
+    ///
+    /// # Argument
+    ///
+    /// `bytes` - A in-memory WASM bytes.
+    ///
+    /// # Error
+    ///
+    /// If fail to desesialize the module, then an error is returned.
+    pub fn deserialize(bytes: impl AsRef<[u8]>) -> WasmEdgeResult<Self> {
+        let loader = Loader::create(None)?;
+        let module = loader.from_bytes(bytes.as_ref())?;
+        Ok(module)
     }
 }
 
