@@ -14,20 +14,12 @@ use crate::{
         module::InnerInstance,
     },
     loader::{InnerLoader, Loader},
-    // r#async::{AsyncResult, InnerAsyncResult},
     statistics::{InnerStat, Statistics},
     store::{InnerStore, Store},
     types::WasmEdgeString,
     utils::{self, check},
     validator::{InnerValidator, Validator},
-    Config,
-    Engine,
-    ImportObject,
-    Instance,
-    Module,
-    WasiModule,
-    WasmEdgeResult,
-    WasmValue,
+    Config, Engine, ImportObject, Instance, Module, WasiModule, WasmEdgeResult, WasmValue,
 };
 #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
 use crate::{
@@ -35,7 +27,7 @@ use crate::{
     WasiCryptoSignaturesModule, WasiCryptoSymmetricModule,
 };
 use std::{collections::HashMap, path::Path, sync::Arc};
-use switcheroo::stack::*;
+use switcher2::stack::*;
 
 use std::time::Duration;
 use tokio::time::sleep;

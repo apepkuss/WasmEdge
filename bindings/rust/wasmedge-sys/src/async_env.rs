@@ -49,7 +49,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-use switcheroo::{stack, stack::EightMbStack, Generator, Yielder};
+use switcher2::{stack, stack::EightMbStack, Generator, Yielder};
 
 /// AsyncWormhole represents a Future that uses a generator with a separate stack to execute a closure.
 ///
