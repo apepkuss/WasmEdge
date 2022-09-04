@@ -246,6 +246,53 @@ lazy_static! {
         ));
 }
 
+/// Type alias for a boxed async native function.
+pub type BoxedAsyncFn = Box<
+    dyn for<'a> Fn(
+            &'a CallingFrame,
+            Vec<WasmValue>,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<Output = Result<Vec<WasmValue>, error::HostFuncError>> + 'a,
+            >,
+        > + Send
+        + Sync,
+>;
+
+lazy_static! {
+    static ref ASYNC_HOST_FUNCS: Arc<RwLock<HashMap<usize, BoxedAsyncFn>>> =
+        Arc::new(RwLock::new(HashMap::with_capacity(
+            std::env::var("MAX_HOST_FUNC_LENGTH")
+                .map(|s| s
+                    .parse::<usize>()
+                    .expect("MAX_HOST_FUNC_LENGTH should be a positive integer."))
+                .unwrap_or(500)
+        )));
+}
+
+/// Type alias for a boxed async native function.
+pub type WasmEdgeHostFuncResult<T> = Result<T, error::HostFuncError>;
+pub type WasmEdgeHostFuncFuture<'a> = async_env::AsyncWasmEdgeResult<
+    'a,
+    switcher2::stack::EightMbStack,
+    WasmEdgeHostFuncResult<Vec<WasmValue>>,
+    fn(),
+>;
+pub type NewBoxedAsyncFn = Box<
+    dyn for<'a> Fn(&'a CallingFrame, Vec<WasmValue>) -> WasmEdgeHostFuncFuture<'a> + Send + Sync,
+>;
+
+lazy_static! {
+    static ref ASYNC_HOST_FUNCS_NEW: Arc<RwLock<HashMap<usize, NewBoxedAsyncFn>>> =
+        Arc::new(RwLock::new(HashMap::with_capacity(
+            std::env::var("MAX_HOST_FUNC_LENGTH")
+                .map(|s| s
+                    .parse::<usize>()
+                    .expect("MAX_HOST_FUNC_LENGTH should be a positive integer."))
+                .unwrap_or(500)
+        )));
+}
+
 /// Type alias for a boxed native function. This type is used in non-thread-safe cases.
 pub type BoxedFnSingle =
     Box<dyn Fn(&CallingFrame, Vec<WasmValue>) -> Result<Vec<WasmValue>, error::HostFuncError>>;

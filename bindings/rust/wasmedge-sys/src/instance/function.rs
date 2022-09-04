@@ -2,7 +2,8 @@
 
 use crate::{
     error::{FuncError, HostFuncError, WasmEdgeError},
-    ffi, BoxedFn, BoxedFnSingle, CallingFrame, Engine, WasmEdgeResult, WasmValue, HOST_FUNCS,
+    ffi, BoxedAsyncFn, BoxedFn, BoxedFnSingle, CallingFrame, Engine, NewBoxedAsyncFn,
+    WasmEdgeResult, WasmValue, ASYNC_HOST_FUNCS, ASYNC_HOST_FUNCS_NEW, HOST_FUNCS,
     HOST_FUNCS_SINGLE,
 };
 use core::ffi::c_void;
@@ -68,6 +69,126 @@ extern "C" fn wraper_fn(
                 },
             }
         }
+    }
+}
+
+extern "C" fn wraper_async_fn(
+    key_ptr: *mut c_void,
+    _data: *mut c_void,
+    call_frame_ctx: *const ffi::WasmEdge_CallingFrameContext,
+    params: *const ffi::WasmEdge_Value,
+    param_len: u32,
+    returns: *mut ffi::WasmEdge_Value,
+    return_len: u32,
+) -> ffi::WasmEdge_Result {
+    let frame = CallingFrame::create(call_frame_ctx);
+
+    let key = key_ptr as *const usize as usize;
+
+    let input = {
+        let raw_input = unsafe {
+            std::slice::from_raw_parts(
+                params,
+                param_len
+                    .try_into()
+                    .expect("len of params should not greater than usize"),
+            )
+        };
+        raw_input.iter().map(|r| (*r).into()).collect::<Vec<_>>()
+    };
+
+    let return_len = return_len
+        .try_into()
+        .expect("len of returns should not greater than usize");
+    let raw_returns = unsafe { std::slice::from_raw_parts_mut(returns, return_len) };
+
+    let result = {
+        let host_functions = ASYNC_HOST_FUNCS.read();
+        let real_fn = host_functions
+            .get(&key)
+            .expect("host function should be there");
+
+        tokio::runtime::Runtime::new()
+            .expect("Unable to create a Tokio runtime")
+            .block_on(real_fn(&frame, input))
+    };
+
+    match result {
+        Ok(v) => {
+            assert!(v.len() == return_len);
+            for (idx, item) in v.into_iter().enumerate() {
+                raw_returns[idx] = item.as_raw();
+            }
+            ffi::WasmEdge_Result { Code: 0 }
+        }
+        Err(err) => match err {
+            HostFuncError::User(code) => unsafe {
+                ffi::WasmEdge_ResultGen(ffi::WasmEdge_ErrCategory_UserLevelError, code)
+            },
+            HostFuncError::Runtime(code) => unsafe {
+                ffi::WasmEdge_ResultGen(ffi::WasmEdge_ErrCategory_WASM, code)
+            },
+        },
+    }
+}
+
+extern "C" fn wraper_async_fn_new(
+    key_ptr: *mut c_void,
+    _data: *mut c_void,
+    call_frame_ctx: *const ffi::WasmEdge_CallingFrameContext,
+    params: *const ffi::WasmEdge_Value,
+    param_len: u32,
+    returns: *mut ffi::WasmEdge_Value,
+    return_len: u32,
+) -> ffi::WasmEdge_Result {
+    let frame = CallingFrame::create(call_frame_ctx);
+
+    let key = key_ptr as *const usize as usize;
+
+    let input = {
+        let raw_input = unsafe {
+            std::slice::from_raw_parts(
+                params,
+                param_len
+                    .try_into()
+                    .expect("len of params should not greater than usize"),
+            )
+        };
+        raw_input.iter().map(|r| (*r).into()).collect::<Vec<_>>()
+    };
+
+    let return_len = return_len
+        .try_into()
+        .expect("len of returns should not greater than usize");
+    let raw_returns = unsafe { std::slice::from_raw_parts_mut(returns, return_len) };
+
+    let result = {
+        let host_functions = ASYNC_HOST_FUNCS_NEW.read();
+        let real_fn = host_functions
+            .get(&key)
+            .expect("host function should be there");
+
+        tokio::runtime::Runtime::new()
+            .expect("Unable to create a Tokio runtime")
+            .block_on(real_fn(&frame, input))
+    };
+
+    match result {
+        Ok(v) => {
+            assert!(v.len() == return_len);
+            for (idx, item) in v.into_iter().enumerate() {
+                raw_returns[idx] = item.as_raw();
+            }
+            ffi::WasmEdge_Result { Code: 0 }
+        }
+        Err(err) => match err {
+            HostFuncError::User(code) => unsafe {
+                ffi::WasmEdge_ResultGen(ffi::WasmEdge_ErrCategory_UserLevelError, code)
+            },
+            HostFuncError::Runtime(code) => unsafe {
+                ffi::WasmEdge_ResultGen(ffi::WasmEdge_ErrCategory_WASM, code)
+            },
+        },
     }
 }
 
@@ -252,6 +373,82 @@ impl Function {
 
         match ctx.is_null() {
             true => Err(Box::new(WasmEdgeError::Func(FuncError::Create))),
+            false => Ok(Self {
+                inner: InnerFunc(ctx),
+                registered: false,
+            }),
+        }
+    }
+
+    pub fn create_async(ty: &FuncType, real_fn: BoxedAsyncFn, cost: u64) -> WasmEdgeResult<Self> {
+        let mut async_host_functions = ASYNC_HOST_FUNCS.write();
+        if async_host_functions.len() >= async_host_functions.capacity() {
+            return Err(WasmEdgeError::Func(FuncError::CreateBinding(format!(
+                "The number of the async host functions reaches the upper bound: {}",
+                async_host_functions.capacity()
+            ))));
+        }
+
+        // generate key for the coming host function
+        let mut rng = rand::thread_rng();
+        let mut key: usize = rng.gen();
+        while async_host_functions.contains_key(&key) {
+            key = rng.gen();
+        }
+        async_host_functions.insert(key, real_fn);
+
+        let ctx = unsafe {
+            ffi::WasmEdge_FunctionInstanceCreateBinding(
+                ty.inner.0,
+                Some(wraper_async_fn),
+                key as *const usize as *mut c_void,
+                std::ptr::null_mut(),
+                cost,
+            )
+        };
+
+        match ctx.is_null() {
+            true => Err(WasmEdgeError::Func(FuncError::Create)),
+            false => Ok(Self {
+                inner: InnerFunc(ctx),
+                registered: false,
+            }),
+        }
+    }
+
+    pub fn create_async_new(
+        ty: &FuncType,
+        real_fn: NewBoxedAsyncFn,
+        cost: u64,
+    ) -> WasmEdgeResult<Self> {
+        let mut async_host_functions = ASYNC_HOST_FUNCS_NEW.write();
+        if async_host_functions.len() >= async_host_functions.capacity() {
+            return Err(WasmEdgeError::Func(FuncError::CreateBinding(format!(
+                "The number of the async host functions reaches the upper bound: {}",
+                async_host_functions.capacity()
+            ))));
+        }
+
+        // generate key for the coming host function
+        let mut rng = rand::thread_rng();
+        let mut key: usize = rng.gen();
+        while async_host_functions.contains_key(&key) {
+            key = rng.gen();
+        }
+        async_host_functions.insert(key, real_fn);
+
+        let ctx = unsafe {
+            ffi::WasmEdge_FunctionInstanceCreateBinding(
+                ty.inner.0,
+                Some(wraper_async_fn_new),
+                key as *const usize as *mut c_void,
+                std::ptr::null_mut(),
+                cost,
+            )
+        };
+
+        match ctx.is_null() {
+            true => Err(WasmEdgeError::Func(FuncError::Create)),
             false => Ok(Self {
                 inner: InnerFunc(ctx),
                 registered: false,
