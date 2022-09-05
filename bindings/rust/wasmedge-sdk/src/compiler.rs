@@ -69,3 +69,64 @@ impl Compiler {
         Ok(())
     }
 }
+
+mod tests {
+    #[test]
+    #[allow(clippy::assertions_on_result_states)]
+    fn test_compiler() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::{io::WasmVal, params, wat2wasm, Compiler, Executor, Module, Store};
+
+        let result = wat2wasm(
+            br#"
+            (module
+                (memory $0 0)
+                (export "memory" (memory $0))
+                (global (export "__heap_base") i32 (i32.const 0))
+                (func (export "main")
+                    (param i32 i32) (result i64)
+        
+                    ;; assert(memory.grow returns != -1)
+                    (if
+                        (i32.eq
+                            (memory.grow
+                                (i32.const 25)
+                            )
+                            (i32.const -1)
+                        )
+                        (unreachable)
+                    )
+        
+                    (i64.const 0)
+                )
+            )
+            "#,
+        );
+        assert!(result.is_ok());
+        let wasm_bytes = result.unwrap();
+
+        let path = std::path::Path::new("runtime.wasm");
+
+        Compiler::new(None)?.compile_from_bytes(&wasm_bytes, &path)?;
+
+        let module = Module::from_file(None, &path)?;
+
+        // create an executor
+        let mut executor = Executor::new(None, None).unwrap();
+
+        // create a store
+        let mut store = Store::new().unwrap();
+
+        // register the module into the store
+        let instance = store.register_active_module(&mut executor, &module)?;
+
+        // get the exported function "run"
+        let fn_main = instance
+            .func("main")
+            .expect("Not found host func named 'main'");
+
+        // run host function
+        let _result = fn_main.call(&mut executor, params!(0, 0));
+
+        Ok(())
+    }
+}
