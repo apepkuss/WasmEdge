@@ -340,7 +340,7 @@ impl Vm {
     ///
     /// If fail to run, then an error is returned.
     pub fn run_func_from_bytes(
-        mut self,
+        self,
         bytes: &[u8],
         func_name: impl AsRef<str>,
         args: impl IntoIterator<Item = sys::WasmValue>,
@@ -363,7 +363,7 @@ impl Vm {
     ///
     /// If fail to run, then an error is returned.
     pub fn run_func_from_module(
-        mut self,
+        self,
         module: Module,
         func_name: impl AsRef<str>,
         args: impl IntoIterator<Item = sys::WasmValue>,
