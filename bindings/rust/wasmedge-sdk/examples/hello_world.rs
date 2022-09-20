@@ -2,7 +2,6 @@
 // #![feature(explicit_generic_args_with_impl_trait)]
 #![feature(never_type)]
 
-use wasmedge_macro::host_function;
 use wasmedge_sdk::{
     error::HostFuncError, host_function, params, wat2wasm, Caller, Executor, ImportObjectBuilder,
     Module, Store, WasmValue,

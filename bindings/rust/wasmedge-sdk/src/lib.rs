@@ -148,7 +148,6 @@
 //! * [wasmedge-types: WasmEdge Types](https://crates.io/crates/wasmedge-types)
 //!
 
-pub mod caller;
 #[doc(hidden)]
 pub mod caller;
 #[doc(hidden)]
