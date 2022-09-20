@@ -1,8 +1,7 @@
 use switcher2::stack::*;
 use wasmedge_macro::sys_async_host_function2;
 use wasmedge_sys::{
-    async_env::AsyncWasmEdgeResult, CallingFrame, Executor, FuncType, Function,
-    WasmEdgeHostFuncFuture, WasmEdgeHostFuncResult, WasmValue,
+    async_env::AsyncWasmEdgeResult, CallingFrame, Executor, FuncType, Function, WasmValue,
 };
 use wasmedge_types::error::HostFuncError;
 

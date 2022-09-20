@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let fut1 =
         vm.run_wasm_from_file_async(&path, "task1", 2000, "fib", [WasmValue::from_i32(20)])?;
-    let fut2 = vm.run_wasm_from_file_async(&path, "task1", 550, "fib", [WasmValue::from_i32(5)])?;
+    let fut2 = vm.run_wasm_from_file_async(&path, "task2", 550, "fib", [WasmValue::from_i32(5)])?;
 
     let (ret1, ret2) = tokio::join!(fut1, fut2);
     let returns1 = ret1?;

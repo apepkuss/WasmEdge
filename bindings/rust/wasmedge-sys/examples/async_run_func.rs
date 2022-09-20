@@ -1,6 +1,5 @@
 use wasmedge_sys::{Config, Loader, Store, Vm, WasmValue};
 
-#[cfg_attr(test, test)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
