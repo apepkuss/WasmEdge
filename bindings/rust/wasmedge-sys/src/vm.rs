@@ -14,6 +14,7 @@ use crate::{
         module::InnerInstance,
     },
     loader::{InnerLoader, Loader},
+    r#async::{AsyncResult, InnerAsyncResult},
     statistics::{InnerStat, Statistics},
     store::{InnerStore, Store},
     types::WasmEdgeString,
@@ -647,6 +648,41 @@ impl Vm {
 
         Ok(returns.into_iter().map(Into::into).collect::<Vec<_>>())
     }
+    /// AsyncResultly runs an exported WASM function by name. The WASM function is hosted by the anonymous [module](crate::Module) in the [store](crate::Store) of the [Vm].
+    ///
+    /// This is the final step to invoke a WASM function step by step. After instantiating a WASM module in the [Vm], the WASM module is registered into the [store](crate::Store) of the [Vm] as an anonymous module. Then repeatedly call this function to invoke the exported WASM functions by their names until the [Vm] is reset or a new WASM module is registered or loaded.
+    ///
+    /// # Arguments
+    ///
+    /// * `func_name` - The name of the exported WASM function to run.
+    ///
+    /// * `params` - The parameter values passed to the exported WASM function.
+    ///
+    /// # Error
+    ///
+    /// If fail to run the WASM function, then an error is returned.
+    pub fn run_function_async_old(
+        &self,
+        func_name: impl AsRef<str>,
+        params: impl IntoIterator<Item = WasmValue>,
+    ) -> WasmEdgeResult<AsyncResult> {
+        // prepare parameters
+        let raw_params = params.into_iter().map(|x| x.as_raw()).collect::<Vec<_>>();
+
+        let func_name: WasmEdgeString = func_name.as_ref().into();
+        let ctx = unsafe {
+            ffi::WasmEdge_VMAsyncExecute(
+                self.inner.0,
+                func_name.as_raw(),
+                raw_params.as_ptr(),
+                raw_params.len() as u32,
+            )
+        };
+
+        Ok(AsyncResult {
+            inner: InnerAsyncResult(ctx),
+        })
+    }
 
     pub fn run_function_async(
         &self,
@@ -732,6 +768,47 @@ impl Vm {
         }
 
         Ok(returns.into_iter().map(Into::into).collect::<Vec<_>>())
+    }
+
+    /// Runs an exported WASM function by its name and the module's name in which the WASM function is hosted.
+    ///
+    /// After registering a WASM module in the [Vm], repeatedly call this function to run exported WASM functions by their function names and the module names until the [Vm] is reset.
+    ///
+    /// # Arguments
+    ///
+    /// * `mod_name` - The name of the WASM module registered into the [store](crate::Store) of the [Vm].
+    ///
+    /// * `func_name` - The name of the exported WASM function to run.
+    ///
+    /// * `params` - The parameter values passed to the exported WASM function.
+    ///
+    /// # Error
+    ///
+    /// If fail to run the WASM function, then an error is returned.
+    pub fn run_registered_function_async_old(
+        &self,
+        mod_name: impl AsRef<str>,
+        func_name: impl AsRef<str>,
+        params: impl IntoIterator<Item = WasmValue>,
+    ) -> WasmEdgeResult<AsyncResult> {
+        // prepare parameters
+        let raw_params = params.into_iter().map(|x| x.as_raw()).collect::<Vec<_>>();
+
+        let mod_name: WasmEdgeString = mod_name.as_ref().into();
+        let func_name: WasmEdgeString = func_name.as_ref().into();
+        let ctx = unsafe {
+            ffi::WasmEdge_VMAsyncExecuteRegistered(
+                self.inner.0,
+                mod_name.as_raw(),
+                func_name.as_raw(),
+                raw_params.as_ptr(),
+                raw_params.len() as u32,
+            )
+        };
+
+        Ok(AsyncResult {
+            inner: InnerAsyncResult(ctx),
+        })
     }
 
     pub fn run_registered_function_async(

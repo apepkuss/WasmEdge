@@ -152,6 +152,8 @@ pub mod ffi {
 }
 #[doc(hidden)]
 pub mod ast_module;
+#[doc(hidden)]
+pub mod r#async;
 pub mod async_env;
 #[doc(hidden)]
 #[cfg(feature = "aot")]
@@ -211,6 +213,8 @@ pub use instance::{
 };
 #[doc(inline)]
 pub use loader::Loader;
+#[doc(inline)]
+pub use r#async::AsyncResult;
 #[doc(inline)]
 pub use statistics::Statistics;
 #[doc(inline)]
