@@ -383,9 +383,11 @@ impl Function {
     pub fn create_async(ty: &FuncType, real_fn: BoxedAsyncFn, cost: u64) -> WasmEdgeResult<Self> {
         let mut async_host_functions = ASYNC_HOST_FUNCS.write();
         if async_host_functions.len() >= async_host_functions.capacity() {
-            return Err(WasmEdgeError::Func(FuncError::CreateBinding(format!(
-                "The number of the async host functions reaches the upper bound: {}",
-                async_host_functions.capacity()
+            return Err(Box::new(WasmEdgeError::Func(FuncError::CreateBinding(
+                format!(
+                    "The number of the async host functions reaches the upper bound: {}",
+                    async_host_functions.capacity()
+                ),
             ))));
         }
 
@@ -408,7 +410,7 @@ impl Function {
         };
 
         match ctx.is_null() {
-            true => Err(WasmEdgeError::Func(FuncError::Create)),
+            true => Err(Box::new(WasmEdgeError::Func(FuncError::Create))),
             false => Ok(Self {
                 inner: InnerFunc(ctx),
                 registered: false,
@@ -423,9 +425,11 @@ impl Function {
     ) -> WasmEdgeResult<Self> {
         let mut async_host_functions = ASYNC_HOST_FUNCS_NEW.write();
         if async_host_functions.len() >= async_host_functions.capacity() {
-            return Err(WasmEdgeError::Func(FuncError::CreateBinding(format!(
-                "The number of the async host functions reaches the upper bound: {}",
-                async_host_functions.capacity()
+            return Err(Box::new(WasmEdgeError::Func(FuncError::CreateBinding(
+                format!(
+                    "The number of the async host functions reaches the upper bound: {}",
+                    async_host_functions.capacity()
+                ),
             ))));
         }
 
@@ -448,7 +452,7 @@ impl Function {
         };
 
         match ctx.is_null() {
-            true => Err(WasmEdgeError::Func(FuncError::Create)),
+            true => Err(Box::new(WasmEdgeError::Func(FuncError::Create))),
             false => Ok(Self {
                 inner: InnerFunc(ctx),
                 registered: false,

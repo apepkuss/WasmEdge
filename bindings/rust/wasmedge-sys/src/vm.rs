@@ -736,19 +736,19 @@ impl Vm {
 
     pub fn run_registered_function_async(
         &self,
-        task_name: String,
+        task_name: impl AsRef<str>,
         millis: u64,
         mod_name: impl AsRef<str>,
         func_name: impl AsRef<str>,
         params: impl IntoIterator<Item = WasmValue>,
     ) -> WasmEdgeFuture<'_> {
         let stack = EightMbStack::new().unwrap();
+        let task_name: String = task_name.as_ref().into();
         let mod_name: String = mod_name.as_ref().into();
         let func_name: String = func_name.as_ref().into();
         let params: Vec<WasmValue> = params.into_iter().collect();
         AsyncWasmEdgeResult::<_, _, fn()>::new(stack, move |yielder| {
-            let name = task_name;
-            self.call_func_async(yielder, name, millis, mod_name, func_name, params)
+            self.call_func_async(yielder, task_name, millis, mod_name, func_name, params)
         })
         .unwrap()
     }
@@ -1904,91 +1904,6 @@ mod tests {
     }
 
     #[test]
-    fn test_vm_run_wasm_from_file_async() {
-        // create a Config context
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-        config.interruptible(true);
-        assert!(config.interruptible_enabled());
-
-        // create a Vm context with the given Config and Store
-        let result = Vm::create(Some(config), None);
-        assert!(result.is_ok());
-        let mut vm = result.unwrap();
-
-        // run a function from a wasm file
-        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sys/tests/data/fibonacci.wasm");
-        let result = vm.run_wasm_from_file_async(&path, "fib", [WasmValue::from_i32(5)]);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_ok());
-        let returns = result.unwrap();
-        assert_eq!(returns[0].to_i32(), 8);
-
-        // run a function from a non-existent file
-        let result = vm.run_wasm_from_file_async("no_file", "fib", [WasmValue::from_i32(5)]);
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Load(
-                CoreLoadError::IllegalPath
-            )))
-        );
-
-        // run a function from a WASM file with the empty parameters
-        let result = vm.run_wasm_from_file_async(&path, "fib", []);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // run a function from a WASM file with the parameters of wrong type
-        let result = vm.run_wasm_from_file_async(&path, "fib", [WasmValue::from_i64(5)]);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // fun a function: the specified function name is non-existant
-        let result = vm.run_wasm_from_file_async(&path, "fib2", [WasmValue::from_i32(5)]);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Common(
-                CoreCommonError::FuncNotFound
-            )))
-        );
-    }
-
-    #[test]
     fn test_vm_run_wasm_from_bytes() {
         // create a Config context
         let result = Config::create();
@@ -2091,125 +2006,6 @@ mod tests {
     }
 
     #[test]
-    fn test_vm_run_wasm_from_bytes_async() {
-        // create a Config context
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-        config.interruptible(true);
-        assert!(config.interruptible_enabled());
-
-        // create a Vm context with the given Config and Store
-        let result = Vm::create(Some(config), None);
-        assert!(result.is_ok());
-        let mut vm = result.unwrap();
-
-        // run a function from a in-memory wasm bytes
-        let result = wat2wasm(
-            br#"(module
-            (export "fib" (func $fib))
-            (func $fib (param $n i32) (result i32)
-             (if
-              (i32.lt_s
-               (get_local $n)
-               (i32.const 2)
-              )
-              (return
-               (i32.const 1)
-              )
-             )
-             (return
-              (i32.add
-               (call $fib
-                (i32.sub
-                 (get_local $n)
-                 (i32.const 2)
-                )
-               )
-               (call $fib
-                (i32.sub
-                 (get_local $n)
-                 (i32.const 1)
-                )
-               )
-              )
-             )
-            )
-           )
-        "#,
-        );
-        assert!(result.is_ok());
-        let wasm_bytes = result.unwrap();
-        let result = vm.run_wasm_from_bytes_async(&wasm_bytes, "fib", [WasmValue::from_i32(5)]);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_ok());
-        let returns = result.unwrap();
-        assert_eq!(returns[0].to_i32(), 8);
-
-        // run a function from an empty buffer
-        let empty_buffer: Vec<u8> = Vec::new();
-        let result = vm.run_wasm_from_bytes_async(&empty_buffer, "fib", [WasmValue::from_i32(5)]);
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Load(
-                CoreLoadError::UnexpectedEnd
-            )))
-        );
-
-        // run a function with the empty parameters
-        let result = vm.run_wasm_from_bytes_async(&wasm_bytes, "fib", []);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // run a function with the parameters of wrong type
-        let result = vm.run_wasm_from_bytes_async(&wasm_bytes, "fib", [WasmValue::from_i64(5)]);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // fun a function: the specified function name is non-existant
-        let result = vm.run_wasm_from_bytes_async(&wasm_bytes, "fib2", [WasmValue::from_i64(5)]);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Common(
-                CoreCommonError::FuncNotFound
-            )))
-        );
-    }
-
-    #[test]
     fn test_vm_run_wasm_from_module() {
         // create a Config context
         let result = Config::create();
@@ -2265,83 +2061,6 @@ mod tests {
             result.unwrap_err(),
             Box::new(WasmEdgeError::Instance(InstanceError::NotFoundFunc(
                 "fib2".into()
-            )))
-        );
-    }
-
-    #[test]
-    fn test_vm_run_wasm_from_module_async() {
-        // create a Config context
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-        config.interruptible(true);
-        assert!(config.interruptible_enabled());
-
-        // create a Vm context with the given Config and Store
-        let result = Vm::create(Some(config), None);
-        assert!(result.is_ok());
-        let mut vm = result.unwrap();
-
-        // run a function from a module
-        let module = load_fib_module();
-        let result = vm.run_wasm_from_module_async(module, "fib", [WasmValue::from_i32(5)]);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_ok());
-        let returns = result.unwrap();
-        assert_eq!(returns[0].to_i32(), 8);
-
-        // run a function with the empty parameters
-        let module = load_fib_module();
-        let result = vm.run_wasm_from_module_async(module, "fib", []);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // run a function with the parameters of wrong type
-        let module = load_fib_module();
-        let result = vm.run_wasm_from_module_async(module, "fib", [WasmValue::from_i64(5)]);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // fun a function: the specified function name is non-existant
-        let module = load_fib_module();
-        let result = vm.run_wasm_from_module_async(module, "fib2", [WasmValue::from_i64(5)]);
-        assert!(result.is_ok());
-        let async_result = result.unwrap();
-        let ok = async_result.wait_for(1_000);
-        assert!(ok);
-        let result = async_result.get_async();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Common(
-                CoreCommonError::FuncNotFound
             )))
         );
     }
