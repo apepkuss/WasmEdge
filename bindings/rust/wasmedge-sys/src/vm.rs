@@ -840,12 +840,13 @@ impl Vm {
         params: impl IntoIterator<Item = WasmValue>,
     ) -> WasmEdgeResult<Vec<WasmValue>> {
         yielder.async_suspend(async {
+            println!("Task {} started.", task_name.as_ref());
             println!("Task {} sleeping for {} ms.", task_name.as_ref(), millis);
 
             sleep(Duration::from_millis(millis)).await;
             let result = self.run_registered_function(mod_name, func_name, params);
 
-            println!("Task {} stopping.", task_name.as_ref());
+            println!("Task {} stopped.", task_name.as_ref());
 
             result
         })
