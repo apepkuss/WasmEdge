@@ -1376,7 +1376,7 @@ mod tests {
         // create Vm instance
         let result = Vm::create(Some(config), Some(&mut store));
         assert!(result.is_ok());
-        let mut vm = result.unwrap();
+        let vm = result.unwrap();
 
         // load wasm module from a specified file
         let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
@@ -1413,7 +1413,7 @@ mod tests {
         // create Vm instance
         let result = Vm::create(Some(config), Some(&mut store));
         assert!(result.is_ok());
-        let mut vm = result.unwrap();
+        let vm = result.unwrap();
 
         // load wasm module from buffer
         let wasm_path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
@@ -1454,7 +1454,7 @@ mod tests {
         // create a Vm context with the given Config and Store
         let result = Vm::create(Some(config), Some(&mut store));
         assert!(result.is_ok());
-        let mut vm = result.unwrap();
+        let vm = result.unwrap();
 
         // create a loader
         let result = Config::create();
@@ -1483,7 +1483,7 @@ mod tests {
     fn test_vm_validate() {
         let result = Vm::create(None, None);
         assert!(result.is_ok());
-        let mut vm = result.unwrap();
+        let vm = result.unwrap();
 
         let result = vm.validate();
         assert!(result.is_err());
@@ -1524,7 +1524,7 @@ mod tests {
     fn test_vm_instantiate() {
         let result = Vm::create(None, None);
         assert!(result.is_ok());
-        let mut vm = result.unwrap();
+        let vm = result.unwrap();
 
         let result = vm.instantiate();
         assert!(result.is_err());
@@ -1603,7 +1603,7 @@ mod tests {
 
         let result = Vm::create(Some(config), Some(&mut store));
         assert!(result.is_ok());
-        let mut vm = result.unwrap();
+        let vm = result.unwrap();
 
         // load wasm module from a ast module instance
         let result = vm.load_wasm_from_module(&ast_module);
@@ -2160,7 +2160,7 @@ mod tests {
         // create a Vm context with the given Config and Store
         let result = Vm::create(Some(config), Some(&mut store));
         assert!(result.is_ok());
-        let mut vm = result.unwrap();
+        let vm = result.unwrap();
         assert!(!vm.inner.0.is_null());
 
         let handle = thread::spawn(move || {
@@ -2199,7 +2199,7 @@ mod tests {
         let handle = thread::spawn(move || {
             let result = vm_cloned.lock();
             assert!(result.is_ok());
-            let mut vm = result.unwrap();
+            let vm = result.unwrap();
 
             // run a function from a wasm file
             let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))

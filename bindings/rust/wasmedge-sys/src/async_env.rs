@@ -153,7 +153,7 @@ impl<'a, Output> AsyncYielder<'a, Output> {
     {
         let mut future = unsafe { Pin::new_unchecked(&mut future) };
         loop {
-            let mut cx = Context::from_waker(&mut self.waker);
+            let mut cx = Context::from_waker(&self.waker);
             self.waker = match future.as_mut().poll(&mut cx) {
                 Poll::Pending => self.yielder.suspend(None),
                 Poll::Ready(result) => return result,
