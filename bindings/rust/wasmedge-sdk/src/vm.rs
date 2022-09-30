@@ -264,7 +264,7 @@ impl Vm {
         match mod_name {
             Some(mod_name) => {
                 // run a function in the registered module
-                return self.inner.run_registered_function_async(
+                return self.inner.run_registered_function_async_old(
                     mod_name,
                     func_name.as_ref(),
                     args,
@@ -272,7 +272,7 @@ impl Vm {
             }
             None => {
                 // run a function in the active module
-                return self.inner.run_function_async(func_name.as_ref(), args);
+                return self.inner.run_function_async_old(func_name.as_ref(), args);
             }
         };
     }
