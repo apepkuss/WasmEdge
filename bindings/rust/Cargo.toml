@@ -1,3 +1,3 @@
 [workspace]
-exclude = ["build/", "utils/", "wasmedge-sys/examples/wasi_print_env"]
+exclude = ["build/", "utils/", "wasmedge-sys/examples/wasi_print_env", "wasmedge-sys/examples/run-tokio-in-wasm"]
 members = ["wasmedge-sys", "wasmedge-types", "wasmedge-sdk", "wasmedge-macro"]

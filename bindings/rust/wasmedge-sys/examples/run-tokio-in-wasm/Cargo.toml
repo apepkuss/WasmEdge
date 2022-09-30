@@ -1,0 +1,10 @@
+[package]
+edition = "2021"
+name = "run-tokio-in-wasm"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+tokio = {version = "1.21", features = ["time", "rt"]}
