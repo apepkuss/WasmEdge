@@ -10,7 +10,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     config.wasi(true);
     assert!(config.wasi_enabled());
 
-    let vm = Vm::create(Some(config), None)?;
+    let mut vm = Vm::create(Some(config), None)?;
+
+    // initialize the wasi module
+    let mut wasi_module = vm.wasi_module_mut()?;
+    wasi_module.init_wasi(None, None, Some(vec![".:."]));
+
+    // run host function
     vm.run_wasm_from_file(wasm_file, "hello", [])?;
 
     Ok(())

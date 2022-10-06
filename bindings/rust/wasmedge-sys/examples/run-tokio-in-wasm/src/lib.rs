@@ -11,6 +11,9 @@ async fn say_hello() {
 
 #[no_mangle]
 pub fn hello() {
-    let rt = runtime::Builder::new_current_thread().build().unwrap();
+    let rt = runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
     rt.block_on(say_hello());
 }
