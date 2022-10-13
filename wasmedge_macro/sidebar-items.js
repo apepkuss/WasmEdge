@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"attr":[["host_function","Expand a synchronous host function defined with `wasmedge-sdk` crate."],["sys_host_function","Expand a synchronous host function defined with `wasmedge-sys` crate."]]};
