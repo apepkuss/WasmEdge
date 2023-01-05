@@ -154,7 +154,7 @@ impl Func {
             > + Send
             + Sync
             + 'static,
-    ) -> WasmEdgeResult<Self>
+    ) -> WasmEdgeResult<(Self, usize)>
     where
         Args: WasmValTypeList,
         Rets: WasmValTypeList,
@@ -163,12 +163,15 @@ impl Func {
         let args = Args::wasm_types();
         let returns = Rets::wasm_types();
         let ty = FuncType::new(Some(args.to_vec()), Some(returns.to_vec()));
-        let inner = sys::Function::create_async(&ty.into(), boxed_func, 0)?;
-        Ok(Self {
-            inner,
-            name: None,
-            mod_name: None,
-        })
+        let (inner, key) = sys::Function::create_async(&ty.into(), boxed_func, 0)?;
+        Ok((
+            Self {
+                inner,
+                name: None,
+                mod_name: None,
+            },
+            key,
+        ))
     }
 
     /// Returns the exported name of this function.

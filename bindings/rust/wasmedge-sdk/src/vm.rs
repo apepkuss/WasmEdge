@@ -1290,13 +1290,12 @@ mod tests {
         // drop vm first so that the imported host function has a longer lifetime then vm.
         drop(vm);
 
-        assert_eq!(HOST_FUNCS.read().len(), 1);
+        assert!(HOST_FUNCS.read().contains_key(&func_key));
 
         // remove the import host function
-        let result = HOST_FUNCS.write().remove(&func_key);
-        assert!(result.is_some());
+        HOST_FUNCS.write().remove(&func_key);
 
-        assert_eq!(HOST_FUNCS.read().len(), 0);
+        assert!(!HOST_FUNCS.read().contains_key(&func_key));
     }
 
     #[test]

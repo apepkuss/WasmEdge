@@ -43,6 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // create an import module
         let import = ImportObjectBuilder::new()
             .with_func_async::<(), ()>("say_hello", say_hello)?
+            .0
             .build("extern")?;
 
         let vm = Vm::new(None)?.register_import_module(import)?;

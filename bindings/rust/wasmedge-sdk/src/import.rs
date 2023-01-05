@@ -186,7 +186,7 @@ impl ImportObjectBuilder {
             > + Send
             + Sync
             + 'static,
-    ) -> WasmEdgeResult<Self>
+    ) -> WasmEdgeResult<(Self, usize)>
     where
         Args: WasmValTypeList,
         Rets: WasmValTypeList,
@@ -195,9 +195,9 @@ impl ImportObjectBuilder {
         let args = Args::wasm_types();
         let returns = Rets::wasm_types();
         let ty = FuncType::new(Some(args.to_vec()), Some(returns.to_vec()));
-        let inner_func = sys::Function::create_async(&ty.into(), boxed_func, 0)?;
+        let (inner_func, key) = sys::Function::create_async(&ty.into(), boxed_func, 0)?;
         self.funcs.push((name.as_ref().to_owned(), inner_func));
-        Ok(self)
+        Ok((self, key))
     }
 
     /// Adds a [global](crate::Global) to the [ImportObject] to create.
