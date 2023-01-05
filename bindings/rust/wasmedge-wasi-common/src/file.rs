@@ -17,3 +17,15 @@ bitflags! {
         const POLL_READWRITE     = 0b1000000000000;
     }
 }
+
+pub trait WasiFile: Send + Sync {}
+
+pub(crate) struct FileEntry {
+    caps: FileCaps,
+    file: Box<dyn WasiFile>,
+}
+impl FileEntry {
+    pub fn new(caps: FileCaps, file: Box<dyn WasiFile>) -> Self {
+        Self { caps, file }
+    }
+}
