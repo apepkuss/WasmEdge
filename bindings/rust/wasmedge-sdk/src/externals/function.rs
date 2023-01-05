@@ -45,7 +45,7 @@ use wasmedge_sys as sys;
 /// // create a host function
 /// let result = Func::wrap::<(i32, i32), i32>(real_add);
 /// assert!(result.is_ok());
-/// let func = result.unwrap();
+/// let (func, _) = result.unwrap();
 ///
 /// // create an executor
 /// let mut executor = Executor::new(None, None).unwrap();
@@ -84,14 +84,17 @@ impl Func {
             + Send
             + Sync
             + 'static,
-    ) -> WasmEdgeResult<Self> {
+    ) -> WasmEdgeResult<(Self, usize)> {
         let boxed_func = Box::new(real_func);
-        let inner = sys::Function::create(&ty.into(), boxed_func, 0)?;
-        Ok(Self {
-            inner,
-            name: None,
-            mod_name: None,
-        })
+        let (inner, key) = sys::Function::create(&ty.into(), boxed_func, 0)?;
+        Ok((
+            Self {
+                inner,
+                name: None,
+                mod_name: None,
+            },
+            key,
+        ))
     }
 
     /// Creates a host function by wrapping a native function.
@@ -110,7 +113,7 @@ impl Func {
             + Send
             + Sync
             + 'static,
-    ) -> WasmEdgeResult<Self>
+    ) -> WasmEdgeResult<(Self, usize)>
     where
         Args: WasmValTypeList,
         Rets: WasmValTypeList,
@@ -119,12 +122,15 @@ impl Func {
         let args = Args::wasm_types();
         let returns = Rets::wasm_types();
         let ty = FuncType::new(Some(args.to_vec()), Some(returns.to_vec()));
-        let inner = sys::Function::create(&ty.into(), boxed_func, 0)?;
-        Ok(Self {
-            inner,
-            name: None,
-            mod_name: None,
-        })
+        let (inner, key) = sys::Function::create(&ty.into(), boxed_func, 0)?;
+        Ok((
+            Self {
+                inner,
+                name: None,
+                mod_name: None,
+            },
+            key,
+        ))
     }
 
     /// Creates an asynchronous host function by wrapping a native function.
@@ -391,6 +397,7 @@ mod tests {
         let result = ImportObjectBuilder::new()
             .with_func::<(i32, i32), i32>("add", real_add)
             .expect("failed to add host func")
+            .0
             .build("extern");
         assert!(result.is_ok());
         let import = result.unwrap();
@@ -448,7 +455,7 @@ mod tests {
         // create a host function
         let result = Func::wrap::<(i32, i32), i32>(real_add);
         assert!(result.is_ok());
-        let func = result.unwrap();
+        let (func, _) = result.unwrap();
 
         // create an executor
         let mut executor = Executor::new(None, None).unwrap();

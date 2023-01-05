@@ -55,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _import = ImportObjectBuilder::new()
         // add a function
         .with_func::<(i32, i32), i32>("add", real_add)?
+        .0
         // add a global
         .with_global("global", global_const)?
         // add a memory

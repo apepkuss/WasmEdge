@@ -750,7 +750,7 @@ mod tests {
         params,
         types::Val,
         wat2wasm, AsInstance, CallingFrame, Global, GlobalType, ImportObjectBuilder, Memory,
-        MemoryType, Mutability, RefType, Table, TableType, ValType, WasmValue,
+        MemoryType, Mutability, RefType, Table, TableType, ValType, WasmValue, HOST_FUNCS,
     };
 
     #[test]
@@ -1241,9 +1241,10 @@ mod tests {
         let table = result.unwrap();
 
         // create an ImportModule instance
-        let result = ImportObjectBuilder::new()
+        let (import_builder, func_key) = ImportObjectBuilder::new()
             .with_func::<(i32, i32), i32>("add", real_add)
-            .expect("failed to add host function")
+            .expect("failed to add host function");
+        let result = import_builder
             .with_global("global", global_const)
             .expect("failed to add const global")
             .with_memory("mem", memory)
@@ -1280,6 +1281,22 @@ mod tests {
         let global = result.unwrap();
         let result = global.ty();
         assert!(result.is_ok());
+
+        let returns = vm
+            .run_func(Some("extern-module"), "add", params!(1, 2))
+            .unwrap();
+        assert_eq!(returns[0].to_i32(), 3);
+
+        // drop vm first so that the imported host function has a longer lifetime then vm.
+        drop(vm);
+
+        assert_eq!(HOST_FUNCS.read().len(), 1);
+
+        // remove the import host function
+        let result = HOST_FUNCS.write().remove(&func_key);
+        assert!(result.is_some());
+
+        assert_eq!(HOST_FUNCS.read().len(), 0);
     }
 
     #[test]

@@ -111,7 +111,7 @@
 //!  
 //!      // create an import module
 //!      let import = ImportObjectBuilder::new()
-//!          .with_func::<(), ()>("say_hello", Box::new(say_hello_world))?
+//!          .with_func::<(), ()>("say_hello", Box::new(say_hello_world))?.0
 //!          .build("env")?;
 //!  
 //!      // loads a wasm module from the given in-memory bytes
@@ -217,6 +217,8 @@ pub use wasmedge_macro::{async_host_function, host_function};
 pub type WasmValue = wasmedge_sys::types::WasmValue;
 
 pub type CallingFrame = wasmedge_sys::CallingFrame;
+
+pub use wasmedge_sys::HOST_FUNCS;
 
 /// The object that is used to perform a [host function](crate::Func) is required to implement this trait.
 pub trait Engine {

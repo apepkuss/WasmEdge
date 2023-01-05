@@ -97,6 +97,7 @@ fn main() -> anyhow::Result<()> {
     // create import module
     let import = ImportObjectBuilder::new()
         .with_func::<(ExternRef, i32, i32), i32>("add", real_add)?
+        .0
         .build("extern_module")?;
 
     // create a vm instance

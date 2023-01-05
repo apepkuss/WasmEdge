@@ -41,7 +41,7 @@ fn func(_caller: Caller, _input: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostF
         // create a host function
         let result = Func::wrap::<(i32, i32), i32>(real_add);
         assert!(result.is_ok());
-        let func = result.unwrap();
+        let (func, _) = result.unwrap();
 
         // create an executor
         let mut executor = Executor::new(None, None).unwrap();
@@ -63,6 +63,7 @@ fn main() -> anyhow::Result<()> {
     // create an import module
     let import = ImportObjectBuilder::new()
         .with_func::<(), ()>("outer-func", func)?
+        .0
         .build("extern")?;
 
     let _ = Vm::new(None)?.register_import_module(import)?.run_func(

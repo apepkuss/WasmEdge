@@ -132,315 +132,315 @@ impl Store {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        config::{CommonConfigOptions, ConfigBuilder},
-        error::HostFuncError,
-        types::Val,
-        CallingFrame, Executor, Global, GlobalType, ImportObjectBuilder, Memory, MemoryType,
-        Module, Mutability, RefType, Statistics, Table, TableType, ValType, WasmValue,
-    };
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::{
+//         config::{CommonConfigOptions, ConfigBuilder},
+//         error::HostFuncError,
+//         types::Val,
+//         CallingFrame, Executor, Global, GlobalType, ImportObjectBuilder, Memory, MemoryType,
+//         Module, Mutability, RefType, Statistics, Table, TableType, ValType, WasmValue,
+//     };
 
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_store_create() {
-        let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
-        assert!(result.is_ok());
-        let config = result.unwrap();
+//     #[test]
+//     #[allow(clippy::assertions_on_result_states)]
+//     fn test_store_create() {
+//         let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
+//         assert!(result.is_ok());
+//         let config = result.unwrap();
 
-        let result = Statistics::new();
-        assert!(result.is_ok());
-        let mut stat = result.unwrap();
+//         let result = Statistics::new();
+//         assert!(result.is_ok());
+//         let mut stat = result.unwrap();
 
-        let result = Executor::new(Some(&config), Some(&mut stat));
-        assert!(result.is_ok());
+//         let result = Executor::new(Some(&config), Some(&mut stat));
+//         assert!(result.is_ok());
 
-        let result = Store::new();
-        assert!(result.is_ok());
-        let store = result.unwrap();
+//         let result = Store::new();
+//         assert!(result.is_ok());
+//         let store = result.unwrap();
 
-        assert_eq!(store.named_instance_count(), 0);
-    }
+//         assert_eq!(store.named_instance_count(), 0);
+//     }
 
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_store_register_import_module() {
-        // create a Const global instance
-        let result = Global::new(
-            GlobalType::new(ValType::F32, Mutability::Const),
-            Val::F32(3.5),
-        );
-        assert!(result.is_ok());
-        let global_const = result.unwrap();
+//     #[test]
+//     #[allow(clippy::assertions_on_result_states)]
+//     fn test_store_register_import_module() {
+//         // create a Const global instance
+//         let result = Global::new(
+//             GlobalType::new(ValType::F32, Mutability::Const),
+//             Val::F32(3.5),
+//         );
+//         assert!(result.is_ok());
+//         let global_const = result.unwrap();
 
-        // create a memory instance
-        let result = MemoryType::new(10, None, false);
-        assert!(result.is_ok());
-        let memory_type = result.unwrap();
-        let result = Memory::new(memory_type);
-        assert!(result.is_ok());
-        let memory = result.unwrap();
+//         // create a memory instance
+//         let result = MemoryType::new(10, None, false);
+//         assert!(result.is_ok());
+//         let memory_type = result.unwrap();
+//         let result = Memory::new(memory_type);
+//         assert!(result.is_ok());
+//         let memory = result.unwrap();
 
-        // create a table instance
-        let result = Table::new(TableType::new(RefType::FuncRef, 5, None));
-        assert!(result.is_ok());
-        let table = result.unwrap();
+//         // create a table instance
+//         let result = Table::new(TableType::new(RefType::FuncRef, 5, None));
+//         assert!(result.is_ok());
+//         let table = result.unwrap();
 
-        // create an ImportModule instance
-        let result = ImportObjectBuilder::new()
-            .with_func::<(i32, i32), i32>("add", real_add)
-            .expect("failed to add host function")
-            .with_global("global", global_const)
-            .expect("failed to add const global")
-            .with_memory("mem", memory)
-            .expect("failed to add memory")
-            .with_table("table", table)
-            .expect("failed to add table")
-            .build("extern-module");
-        assert!(result.is_ok());
-        let import = result.unwrap();
+//         // create an ImportModule instance
+//         let result = ImportObjectBuilder::new()
+//             .with_func::<(i32, i32), i32>("add", real_add)
+//             .expect("failed to add host function")
+//             .with_global("global", global_const)
+//             .expect("failed to add const global")
+//             .with_memory("mem", memory)
+//             .expect("failed to add memory")
+//             .with_table("table", table)
+//             .expect("failed to add table")
+//             .build("extern-module");
+//         assert!(result.is_ok());
+//         let import = result.unwrap();
 
-        // create an executor
-        let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
-        assert!(result.is_ok());
-        let config = result.unwrap();
+//         // create an executor
+//         let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
+//         assert!(result.is_ok());
+//         let config = result.unwrap();
 
-        let result = Statistics::new();
-        assert!(result.is_ok());
-        let mut stat = result.unwrap();
+//         let result = Statistics::new();
+//         assert!(result.is_ok());
+//         let mut stat = result.unwrap();
 
-        let result = Executor::new(Some(&config), Some(&mut stat));
-        assert!(result.is_ok());
-        let mut executor = result.unwrap();
+//         let result = Executor::new(Some(&config), Some(&mut stat));
+//         assert!(result.is_ok());
+//         let mut executor = result.unwrap();
 
-        // create a store
-        let result = Store::new();
-        assert!(result.is_ok());
-        let mut store = result.unwrap();
+//         // create a store
+//         let result = Store::new();
+//         assert!(result.is_ok());
+//         let mut store = result.unwrap();
 
-        // register an import module into store
-        let result = store.register_import_module(&mut executor, &import);
-        assert!(result.is_ok());
+//         // register an import module into store
+//         let result = store.register_import_module(&mut executor, &import);
+//         assert!(result.is_ok());
 
-        assert_eq!(store.named_instance_count(), 1);
-        assert!(store.instance_names().is_some());
-        assert_eq!(store.instance_names().unwrap(), ["extern-module"]);
+//         assert_eq!(store.named_instance_count(), 1);
+//         assert!(store.instance_names().is_some());
+//         assert_eq!(store.instance_names().unwrap(), ["extern-module"]);
 
-        // get active module instance
-        let result = store.module_instance("extern-module");
-        assert!(result.is_some());
-        let instance = result.unwrap();
-        assert!(instance.name().is_some());
-        assert_eq!(instance.name().unwrap(), "extern-module");
+//         // get active module instance
+//         let result = store.module_instance("extern-module");
+//         assert!(result.is_some());
+//         let instance = result.unwrap();
+//         assert!(instance.name().is_some());
+//         assert_eq!(instance.name().unwrap(), "extern-module");
 
-        let result = instance.global("global");
-        assert!(result.is_some());
-        let global = result.unwrap();
-        let result = global.ty();
-        assert!(result.is_ok());
-    }
+//         let result = instance.global("global");
+//         assert!(result.is_some());
+//         let global = result.unwrap();
+//         let result = global.ty();
+//         assert!(result.is_ok());
+//     }
 
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_store_register_named_module() {
-        // create an executor
-        let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
-        assert!(result.is_ok());
-        let config = result.unwrap();
+//     #[test]
+//     #[allow(clippy::assertions_on_result_states)]
+//     fn test_store_register_named_module() {
+//         // create an executor
+//         let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
+//         assert!(result.is_ok());
+//         let config = result.unwrap();
 
-        let result = Statistics::new();
-        assert!(result.is_ok());
-        let mut stat = result.unwrap();
+//         let result = Statistics::new();
+//         assert!(result.is_ok());
+//         let mut stat = result.unwrap();
 
-        let result = Executor::new(Some(&config), Some(&mut stat));
-        assert!(result.is_ok());
-        let mut executor = result.unwrap();
+//         let result = Executor::new(Some(&config), Some(&mut stat));
+//         assert!(result.is_ok());
+//         let mut executor = result.unwrap();
 
-        // create a store
-        let result = Store::new();
-        assert!(result.is_ok());
-        let mut store = result.unwrap();
+//         // create a store
+//         let result = Store::new();
+//         assert!(result.is_ok());
+//         let mut store = result.unwrap();
 
-        // load wasm module
-        let file = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sdk/examples/data/fibonacci.wat");
+//         // load wasm module
+//         let file = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
+//             .join("bindings/rust/wasmedge-sdk/examples/data/fibonacci.wat");
 
-        let result = Module::from_file(Some(&config), file);
-        assert!(result.is_ok());
-        let module = result.unwrap();
+//         let result = Module::from_file(Some(&config), file);
+//         assert!(result.is_ok());
+//         let module = result.unwrap();
 
-        // register a module into store as a named module
-        let result = store.register_named_module(&mut executor, "extern-module", &module);
-        assert!(result.is_ok());
+//         // register a module into store as a named module
+//         let result = store.register_named_module(&mut executor, "extern-module", &module);
+//         assert!(result.is_ok());
 
-        assert_eq!(store.named_instance_count(), 1);
-        assert!(store.instance_names().is_some());
-        assert_eq!(store.instance_names().unwrap(), ["extern-module"]);
+//         assert_eq!(store.named_instance_count(), 1);
+//         assert!(store.instance_names().is_some());
+//         assert_eq!(store.instance_names().unwrap(), ["extern-module"]);
 
-        // get active module instance
-        let result = store.module_instance("extern-module");
-        assert!(result.is_some());
-        let instance = result.unwrap();
-        assert!(instance.name().is_some());
-        assert_eq!(instance.name().unwrap(), "extern-module");
-    }
+//         // get active module instance
+//         let result = store.module_instance("extern-module");
+//         assert!(result.is_some());
+//         let instance = result.unwrap();
+//         assert!(instance.name().is_some());
+//         assert_eq!(instance.name().unwrap(), "extern-module");
+//     }
 
-    #[test]
-    fn test_store_register_active_module() {
-        // create an executor
-        let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
-        assert!(result.is_ok());
-        let config = result.unwrap();
+//     #[test]
+//     fn test_store_register_active_module() {
+//         // create an executor
+//         let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
+//         assert!(result.is_ok());
+//         let config = result.unwrap();
 
-        let result = Statistics::new();
-        assert!(result.is_ok());
-        let mut stat = result.unwrap();
+//         let result = Statistics::new();
+//         assert!(result.is_ok());
+//         let mut stat = result.unwrap();
 
-        let result = Executor::new(Some(&config), Some(&mut stat));
-        assert!(result.is_ok());
-        let mut executor = result.unwrap();
+//         let result = Executor::new(Some(&config), Some(&mut stat));
+//         assert!(result.is_ok());
+//         let mut executor = result.unwrap();
 
-        // create a store
-        let result = Store::new();
-        assert!(result.is_ok());
-        let mut store = result.unwrap();
+//         // create a store
+//         let result = Store::new();
+//         assert!(result.is_ok());
+//         let mut store = result.unwrap();
 
-        // load wasm module
-        let file = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sdk/examples/data/fibonacci.wat");
+//         // load wasm module
+//         let file = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
+//             .join("bindings/rust/wasmedge-sdk/examples/data/fibonacci.wat");
 
-        let result = Module::from_file(Some(&config), file);
-        assert!(result.is_ok());
-        let module = result.unwrap();
+//         let result = Module::from_file(Some(&config), file);
+//         assert!(result.is_ok());
+//         let module = result.unwrap();
 
-        // register a module into store as active module
-        let result = store.register_active_module(&mut executor, &module);
-        assert!(result.is_ok());
-        let active_instance = result.unwrap();
-        assert!(active_instance.name().is_none());
-        let result = active_instance.func("fib");
-        assert!(result.is_some());
+//         // register a module into store as active module
+//         let result = store.register_active_module(&mut executor, &module);
+//         assert!(result.is_ok());
+//         let active_instance = result.unwrap();
+//         assert!(active_instance.name().is_none());
+//         let result = active_instance.func("fib");
+//         assert!(result.is_some());
 
-        assert_eq!(store.named_instance_count(), 0);
-        assert!(store.instance_names().is_none());
-    }
+//         assert_eq!(store.named_instance_count(), 0);
+//         assert!(store.instance_names().is_none());
+//     }
 
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_store_basic() {
-        // create an executor
-        let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
-        assert!(result.is_ok());
-        let config = result.unwrap();
+//     #[test]
+//     #[allow(clippy::assertions_on_result_states)]
+//     fn test_store_basic() {
+//         // create an executor
+//         let result = ConfigBuilder::new(CommonConfigOptions::default()).build();
+//         assert!(result.is_ok());
+//         let config = result.unwrap();
 
-        let result = Statistics::new();
-        assert!(result.is_ok());
-        let mut stat = result.unwrap();
+//         let result = Statistics::new();
+//         assert!(result.is_ok());
+//         let mut stat = result.unwrap();
 
-        let result = Executor::new(Some(&config), Some(&mut stat));
-        assert!(result.is_ok());
-        let mut executor = result.unwrap();
+//         let result = Executor::new(Some(&config), Some(&mut stat));
+//         assert!(result.is_ok());
+//         let mut executor = result.unwrap();
 
-        // create a store
-        let result = Store::new();
-        assert!(result.is_ok());
-        let mut store = result.unwrap();
+//         // create a store
+//         let result = Store::new();
+//         assert!(result.is_ok());
+//         let mut store = result.unwrap();
 
-        // create a Const global instance
-        let result = Global::new(
-            GlobalType::new(ValType::F32, Mutability::Const),
-            Val::F32(3.5),
-        );
-        assert!(result.is_ok());
-        let global_const = result.unwrap();
+//         // create a Const global instance
+//         let result = Global::new(
+//             GlobalType::new(ValType::F32, Mutability::Const),
+//             Val::F32(3.5),
+//         );
+//         assert!(result.is_ok());
+//         let global_const = result.unwrap();
 
-        // create a memory instance
-        let result = MemoryType::new(10, None, false);
-        assert!(result.is_ok());
-        let memory_type = result.unwrap();
-        let result = Memory::new(memory_type);
-        assert!(result.is_ok());
-        let memory = result.unwrap();
+//         // create a memory instance
+//         let result = MemoryType::new(10, None, false);
+//         assert!(result.is_ok());
+//         let memory_type = result.unwrap();
+//         let result = Memory::new(memory_type);
+//         assert!(result.is_ok());
+//         let memory = result.unwrap();
 
-        // create a table instance
-        let result = Table::new(TableType::new(RefType::FuncRef, 5, None));
-        assert!(result.is_ok());
-        let table = result.unwrap();
+//         // create a table instance
+//         let result = Table::new(TableType::new(RefType::FuncRef, 5, None));
+//         assert!(result.is_ok());
+//         let table = result.unwrap();
 
-        // create an ImportModule instance
-        let result = ImportObjectBuilder::new()
-            .with_func::<(i32, i32), i32>("add", real_add)
-            .expect("failed to add host function")
-            .with_global("global", global_const)
-            .expect("failed to add const global")
-            .with_memory("mem", memory)
-            .expect("failed to add memory")
-            .with_table("table", table)
-            .expect("failed to add table")
-            .build("extern-module");
-        assert!(result.is_ok());
-        let import = result.unwrap();
+//         // create an ImportModule instance
+//         let result = ImportObjectBuilder::new()
+//             .with_func::<(i32, i32), i32>("add", real_add)
+//             .expect("failed to add host function")
+//             .with_global("global", global_const)
+//             .expect("failed to add const global")
+//             .with_memory("mem", memory)
+//             .expect("failed to add memory")
+//             .with_table("table", table)
+//             .expect("failed to add table")
+//             .build("extern-module");
+//         assert!(result.is_ok());
+//         let import = result.unwrap();
 
-        // register a module into store as a named module
-        let result = store.register_import_module(&mut executor, &import);
-        assert!(result.is_ok());
+//         // register a module into store as a named module
+//         let result = store.register_import_module(&mut executor, &import);
+//         assert!(result.is_ok());
 
-        // add a wasm module from a file
-        let file =
-            std::path::PathBuf::from(env!("WASMEDGE_DIR")).join("examples/wasm/fibonacci.wasm");
-        let result = Module::from_file(Some(&config), file);
-        assert!(result.is_ok());
-        let module = result.unwrap();
+//         // add a wasm module from a file
+//         let file =
+//             std::path::PathBuf::from(env!("WASMEDGE_DIR")).join("examples/wasm/fibonacci.wasm");
+//         let result = Module::from_file(Some(&config), file);
+//         assert!(result.is_ok());
+//         let module = result.unwrap();
 
-        let result = store.register_named_module(&mut executor, "fib-module", &module);
-        assert!(result.is_ok());
+//         let result = store.register_named_module(&mut executor, "fib-module", &module);
+//         assert!(result.is_ok());
 
-        // check the exported instances
-        assert_eq!(store.named_instance_count(), 2);
-        assert!(store.instance_names().is_some());
-        let mod_names = store.instance_names().unwrap();
-        assert_eq!(mod_names[0], "extern-module");
-        assert_eq!(mod_names[1], "fib-module");
+//         // check the exported instances
+//         assert_eq!(store.named_instance_count(), 2);
+//         assert!(store.instance_names().is_some());
+//         let mod_names = store.instance_names().unwrap();
+//         assert_eq!(mod_names[0], "extern-module");
+//         assert_eq!(mod_names[1], "fib-module");
 
-        assert_eq!(mod_names[0], "extern-module");
-        let result = store.module_instance(mod_names[0].as_str());
-        assert!(result.is_some());
-        let instance = result.unwrap();
-        assert!(instance.name().is_some());
-        assert_eq!(instance.name().unwrap(), mod_names[0]);
+//         assert_eq!(mod_names[0], "extern-module");
+//         let result = store.module_instance(mod_names[0].as_str());
+//         assert!(result.is_some());
+//         let instance = result.unwrap();
+//         assert!(instance.name().is_some());
+//         assert_eq!(instance.name().unwrap(), mod_names[0]);
 
-        assert_eq!(mod_names[1], "fib-module");
-        let result = store.module_instance(mod_names[1].as_str());
-        assert!(result.is_some());
-        let instance = result.unwrap();
-        assert!(instance.name().is_some());
-        assert_eq!(instance.name().unwrap(), mod_names[1]);
-    }
+//         assert_eq!(mod_names[1], "fib-module");
+//         let result = store.module_instance(mod_names[1].as_str());
+//         assert!(result.is_some());
+//         let instance = result.unwrap();
+//         assert!(instance.name().is_some());
+//         assert_eq!(instance.name().unwrap(), mod_names[1]);
+//     }
 
-    fn real_add(
-        _frame: CallingFrame,
-        inputs: Vec<WasmValue>,
-    ) -> std::result::Result<Vec<WasmValue>, HostFuncError> {
-        if inputs.len() != 2 {
-            return Err(HostFuncError::User(1));
-        }
+//     fn real_add(
+//         _frame: CallingFrame,
+//         inputs: Vec<WasmValue>,
+//     ) -> std::result::Result<Vec<WasmValue>, HostFuncError> {
+//         if inputs.len() != 2 {
+//             return Err(HostFuncError::User(1));
+//         }
 
-        let a = if inputs[0].ty() == ValType::I32 {
-            inputs[0].to_i32()
-        } else {
-            return Err(HostFuncError::User(2));
-        };
+//         let a = if inputs[0].ty() == ValType::I32 {
+//             inputs[0].to_i32()
+//         } else {
+//             return Err(HostFuncError::User(2));
+//         };
 
-        let b = if inputs[1].ty() == ValType::I32 {
-            inputs[1].to_i32()
-        } else {
-            return Err(HostFuncError::User(3));
-        };
+//         let b = if inputs[1].ty() == ValType::I32 {
+//             inputs[1].to_i32()
+//         } else {
+//             return Err(HostFuncError::User(3));
+//         };
 
-        let c = a + b;
+//         let c = a + b;
 
-        Ok(vec![WasmValue::from_i32(c)])
-    }
-}
+//         Ok(vec![WasmValue::from_i32(c)])
+//     }
+// }

@@ -38,6 +38,7 @@ fn main() -> anyhow::Result<()> {
     // create an import module
     let import = ImportObjectBuilder::new()
         .with_func::<(), ()>("say_hello", say_hello)?
+        .0
         .build("env")?;
 
     let wasm_bytes = wat2wasm(

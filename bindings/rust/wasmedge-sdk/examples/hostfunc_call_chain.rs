@@ -50,7 +50,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let import = ImportObjectBuilder::new()
         .with_func::<(), ()>("layer1", host_layer1)?
+        .0
         .with_func::<(), ()>("layer2", host_layer2)?
+        .0
         .build("host")?;
 
     let vm = vm.register_import_module(import)?;
