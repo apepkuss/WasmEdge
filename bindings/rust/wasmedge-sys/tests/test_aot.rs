@@ -98,7 +98,7 @@ fn create_spec_test_module() -> ImportModule {
     let func_ty = result.unwrap();
     let result = Function::create(&func_ty, Box::new(spec_test_print), 0);
     assert!(result.is_ok());
-    let host_func = result.unwrap();
+    let (host_func, _) = result.unwrap();
     // add host function "print"
     import.add_func("print", host_func);
     import

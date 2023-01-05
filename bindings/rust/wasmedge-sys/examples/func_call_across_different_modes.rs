@@ -42,12 +42,12 @@ fn interpreter_call_aot() -> Result<(), Box<dyn std::error::Error>> {
 
     // import host_print_i32 as a host function
     let func_ty = FuncType::create([ValType::I32], [])?;
-    let host_func_print_i32 = Function::create(&func_ty, Box::new(host_print_i32), 0)?;
+    let (host_func_print_i32, _) = Function::create(&func_ty, Box::new(host_print_i32), 0)?;
     import.add_func("host_printI32", host_func_print_i32);
 
     // import host_print_f64 as a host function
     let func_ty = FuncType::create([ValType::F64], [])?;
-    let host_func_print_f64 = Function::create(&func_ty, Box::new(host_print_f64), 0)?;
+    let (host_func_print_f64, _) = Function::create(&func_ty, Box::new(host_print_f64), 0)?;
     import.add_func("host_printF64", host_func_print_f64);
 
     // register the import module
@@ -116,12 +116,12 @@ fn aot_call_interpreter() -> Result<(), Box<dyn std::error::Error>> {
 
     // import host_print_i32 as a host function
     let func_ty = FuncType::create([ValType::I32], [])?;
-    let host_func_print_i32 = Function::create(&func_ty, Box::new(host_print_i32), 0)?;
+    let (host_func_print_i32, _) = Function::create(&func_ty, Box::new(host_print_i32), 0)?;
     import.add_func("host_printI32", host_func_print_i32);
 
     // import host_print_f64 as a host function
     let func_ty = FuncType::create([ValType::F64], [])?;
-    let host_func_print_f64 = Function::create(&func_ty, Box::new(host_print_f64), 0)?;
+    let (host_func_print_f64, _) = Function::create(&func_ty, Box::new(host_print_f64), 0)?;
     import.add_func("host_printF64", host_func_print_f64);
 
     // register the import module

@@ -262,7 +262,7 @@ impl Function {
             + Sync
             + 'static,
         cost: u64,
-    ) -> WasmEdgeResult<Self> {
+    ) -> WasmEdgeResult<(Self, usize)> {
         Self::create(
             ty,
             Box::new(move |frame, args| {

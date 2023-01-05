@@ -13,7 +13,7 @@ use wasmedge_sys::{Config, Vm, WasmValue};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(feature = "async")]
+    #[cfg(all(feature = "async", feature = "aot"))]
     {
         // create a Config context
         let result = Config::create();
