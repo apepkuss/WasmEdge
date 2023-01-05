@@ -1,7 +1,7 @@
 use crate::{
     dir::{DirCaps, DirEntry, WasiDir},
     error::WasiCommonError,
-    file::FileCaps,
+    file::{FileCaps, FileEntry, WasiFile},
     FdMap, StringArray,
 };
 
@@ -44,5 +44,46 @@ impl WasiCtx {
             Some(preopen_dir),
             dir,
         )))
+    }
+
+    pub fn push_file(
+        &mut self,
+        file: Box<dyn WasiFile>,
+        caps: FileCaps,
+    ) -> Result<i32, WasiCommonError> {
+        self.fd_map.push(Box::new(FileEntry::new(caps, file)))
+    }
+
+    pub fn insert_file(
+        &mut self,
+        fd: i32,
+        file: Box<dyn WasiFile>,
+        caps: FileCaps,
+    ) -> Result<(), WasiCommonError> {
+        Ok(self
+            .fd_map
+            .insert_at(fd, Box::new(FileEntry::new(caps, file))))
+    }
+
+    pub fn set_stdin(&mut self, mut file: Box<dyn WasiFile>) {
+        unimplemented!()
+    }
+
+    pub fn set_stdout(&mut self, mut file: Box<dyn WasiFile>) {
+        unimplemented!()
+    }
+
+    pub fn set_stderr(&mut self, mut file: Box<dyn WasiFile>) {
+        unimplemented!()
+    }
+
+    fn stdio_caps(file: &mut dyn WasiFile) -> FileCaps {
+        let mut caps = FileCaps::all();
+
+        if file.isatty() {
+            caps &= !(FileCaps::TELL | FileCaps::SEEK);
+        }
+
+        caps
     }
 }
