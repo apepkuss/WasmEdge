@@ -12,7 +12,7 @@ pub fn create_extern_module(name: impl AsRef<str>) -> ImportModule {
     let func_ty = result.unwrap();
     let result = Function::create(&func_ty, Box::new(extern_add), 0);
     assert!(result.is_ok());
-    let host_func = result.unwrap();
+    let (host_func, _) = result.unwrap();
     import.add_func("func-add", host_func);
 
     // add host function: "func-sub"
@@ -20,7 +20,7 @@ pub fn create_extern_module(name: impl AsRef<str>) -> ImportModule {
     let func_ty = result.unwrap();
     let result = Function::create(&func_ty, Box::new(extern_sub), 0);
     assert!(result.is_ok());
-    let host_func = result.unwrap();
+    let (host_func, _) = result.unwrap();
     import.add_func("func-sub", host_func);
 
     // add host function: "func-mul"
@@ -28,7 +28,7 @@ pub fn create_extern_module(name: impl AsRef<str>) -> ImportModule {
     let func_ty = result.unwrap();
     let result = Function::create(&func_ty, Box::new(extern_mul), 0);
     assert!(result.is_ok());
-    let host_func = result.unwrap();
+    let (host_func, _) = result.unwrap();
     import.add_func("func-mul", host_func);
 
     // add host function: "func-div"
@@ -36,7 +36,7 @@ pub fn create_extern_module(name: impl AsRef<str>) -> ImportModule {
     let func_ty = result.unwrap();
     let result = Function::create(&func_ty, Box::new(extern_div), 0);
     assert!(result.is_ok());
-    let host_func = result.unwrap();
+    let (host_func, _) = result.unwrap();
     import.add_func("func-div", host_func);
 
     // add host function: "func-term"
@@ -44,7 +44,7 @@ pub fn create_extern_module(name: impl AsRef<str>) -> ImportModule {
     assert!(result.is_ok());
     let func_ty = result.unwrap();
     let result = Function::create(&func_ty, Box::new(extern_term), 0);
-    let host_func = result.unwrap();
+    let (host_func, _) = result.unwrap();
     import.add_func("func-term", host_func);
 
     // add host function: "func-fail"
@@ -52,7 +52,7 @@ pub fn create_extern_module(name: impl AsRef<str>) -> ImportModule {
     assert!(result.is_ok());
     let func_ty = result.unwrap();
     let result = Function::create(&func_ty, Box::new(extern_fail), 0);
-    let host_func = result.unwrap();
+    let (host_func, _) = result.unwrap();
     import.add_func("func-fail", host_func);
 
     import

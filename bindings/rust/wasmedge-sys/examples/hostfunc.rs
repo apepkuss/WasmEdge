@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let func_ty = result.unwrap();
     let result = Function::create(&func_ty, Box::new(real_add), 0);
     assert!(result.is_ok());
-    let host_func = result.unwrap();
+    let (host_func, _) = result.unwrap();
 
     // create an ImportObject module
     let mut import = ImportModule::create("extern_module")?;

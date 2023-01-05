@@ -235,7 +235,7 @@ pub type BoxedFn = Box<
 >;
 
 lazy_static! {
-    static ref HOST_FUNCS: RwLock<HashMap<usize, Arc<Mutex<BoxedFn>>>> =
+    pub static ref HOST_FUNCS: RwLock<HashMap<usize, Arc<Mutex<BoxedFn>>>> =
         RwLock::new(HashMap::with_capacity(
             env::var("MAX_HOST_FUNC_LENGTH")
                 .map(|s| s

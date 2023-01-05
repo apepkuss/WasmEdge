@@ -149,7 +149,7 @@ impl Function {
     /// // create a Function instance
     /// let func = Function::create(&func_ty, Box::new(real_add), 0).expect("fail to create a Function instance");
     /// ```
-    pub fn create(ty: &FuncType, real_fn: BoxedFn, cost: u64) -> WasmEdgeResult<Self> {
+    pub fn create(ty: &FuncType, real_fn: BoxedFn, cost: u64) -> WasmEdgeResult<(Self, usize)> {
         let mut map_host_func = HOST_FUNCS.write();
         if map_host_func.len() >= map_host_func.capacity() {
             return Err(Box::new(WasmEdgeError::Func(FuncError::CreateBinding(
@@ -181,10 +181,13 @@ impl Function {
 
         match ctx.is_null() {
             true => Err(Box::new(WasmEdgeError::Func(FuncError::Create))),
-            false => Ok(Self {
-                inner: InnerFunc(ctx),
-                registered: false,
-            }),
+            false => Ok((
+                Self {
+                    inner: InnerFunc(ctx),
+                    registered: false,
+                },
+                key,
+            )),
         }
     }
 
@@ -345,7 +348,7 @@ impl Function {
     /// // create a host function
     /// let result = Function::create(&func_ty, Box::new(real_add), 0);
     /// assert!(result.is_ok());
-    /// let host_func = result.unwrap();
+    /// let (host_func, _) = result.unwrap();
     ///
     /// // create an Executor instance
     /// let result = Executor::create(None, None);
@@ -718,7 +721,7 @@ mod tests {
         // create a host function
         let result = Function::create(&func_ty, Box::new(real_add), 0);
         assert!(result.is_ok());
-        let host_func = result.unwrap();
+        let (host_func, _) = result.unwrap();
 
         // get func type
         let result = host_func.ty();
@@ -796,7 +799,7 @@ mod tests {
                 // create a host function
                 let result = Function::create(&func_ty, Box::new(real_add), 0);
                 assert!(result.is_ok());
-                let host_func = result.unwrap();
+                let (host_func, _) = result.unwrap();
 
                 // run this function
                 let result = Executor::create(None, None);
@@ -823,7 +826,7 @@ mod tests {
         // create a host function
         let result = Function::create(&func_ty, Box::new(func), 0);
         assert!(result.is_ok());
-        let host_func = result.unwrap();
+        let (host_func, _) = result.unwrap();
 
         // run this function
         let result = Executor::create(None, None);
@@ -842,7 +845,7 @@ mod tests {
         // create a host function
         let result = Function::create(&func_ty, Box::new(real_add), 0);
         assert!(result.is_ok());
-        let host_func = result.unwrap();
+        let (host_func, _) = result.unwrap();
 
         let handle = thread::spawn(move || {
             // get func type
@@ -879,7 +882,7 @@ mod tests {
         let handle = thread::spawn(move || {
             let result = host_func_cloned.lock();
             assert!(result.is_ok());
-            let host_func = result.unwrap();
+            let host_func = &result.unwrap().0;
 
             // get func type
             let result = host_func.ty();
@@ -965,7 +968,7 @@ mod tests {
 
         let result = Function::create(&func_ty, Box::new(real_add), 0);
         assert!(result.is_ok());
-        let host_func = result.unwrap();
+        let (host_func, _) = result.unwrap();
 
         // get func type
         let result = host_func.ty();

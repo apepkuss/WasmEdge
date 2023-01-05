@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // add host function
         let func_ty = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32])?;
-        let host_func = Function::create(&func_ty, Box::new(real_add), 0)?;
+        let (host_func, _) = Function::create(&func_ty, Box::new(real_add), 0)?;
         import_wasi.add_func("add", host_func);
 
         // register the Wasi module

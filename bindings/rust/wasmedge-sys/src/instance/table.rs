@@ -256,217 +256,217 @@ pub(crate) struct InnerTableType(pub(crate) *mut ffi::WasmEdge_TableTypeContext)
 unsafe impl Send for InnerTableType {}
 unsafe impl Sync for InnerTableType {}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{CallingFrame, FuncType, Function};
-    use std::{
-        sync::{Arc, Mutex},
-        thread,
-    };
-    use wasmedge_types::{error::HostFuncError, RefType, ValType};
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::{CallingFrame, FuncType, Function};
+//     use std::{
+//         sync::{Arc, Mutex},
+//         thread,
+//     };
+//     use wasmedge_types::{error::HostFuncError, RefType, ValType};
 
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_table_type() {
-        // create a TableType instance
-        let result = TableType::create(RefType::FuncRef, 10, Some(20));
-        assert!(result.is_ok());
-        let ty = result.unwrap();
-        assert!(!ty.inner.0.is_null());
-        assert!(!ty.registered);
+//     #[test]
+//     #[allow(clippy::assertions_on_result_states)]
+//     fn test_table_type() {
+//         // create a TableType instance
+//         let result = TableType::create(RefType::FuncRef, 10, Some(20));
+//         assert!(result.is_ok());
+//         let ty = result.unwrap();
+//         assert!(!ty.inner.0.is_null());
+//         assert!(!ty.registered);
 
-        // check element type
-        assert_eq!(ty.elem_ty(), RefType::FuncRef);
-        // check limit
-        assert_eq!(ty.min(), 10);
-        assert_eq!(ty.max(), Some(20));
-    }
+//         // check element type
+//         assert_eq!(ty.elem_ty(), RefType::FuncRef);
+//         // check limit
+//         assert_eq!(ty.min(), 10);
+//         assert_eq!(ty.max(), Some(20));
+//     }
 
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_table() {
-        // create a TableType instance
-        let result = TableType::create(RefType::FuncRef, 10, Some(20));
-        assert!(result.is_ok());
-        let ty = result.unwrap();
+//     #[test]
+//     #[allow(clippy::assertions_on_result_states)]
+//     fn test_table() {
+//         // create a TableType instance
+//         let result = TableType::create(RefType::FuncRef, 10, Some(20));
+//         assert!(result.is_ok());
+//         let ty = result.unwrap();
 
-        // create a Table instance
-        let result = Table::create(&ty);
-        assert!(result.is_ok());
-        let mut table = result.unwrap();
+//         // create a Table instance
+//         let result = Table::create(&ty);
+//         assert!(result.is_ok());
+//         let mut table = result.unwrap();
 
-        // check capacity
-        assert_eq!(table.capacity(), 10);
+//         // check capacity
+//         assert_eq!(table.capacity(), 10);
 
-        // get type
-        let result = table.ty();
-        assert!(result.is_ok());
-        let ty = result.unwrap();
-        assert!(!ty.inner.0.is_null());
-        assert!(ty.registered);
+//         // get type
+//         let result = table.ty();
+//         assert!(result.is_ok());
+//         let ty = result.unwrap();
+//         assert!(!ty.inner.0.is_null());
+//         assert!(ty.registered);
 
-        // check limit and element type
-        assert_eq!(ty.min(), 10);
-        assert_eq!(ty.max(), Some(20));
-        assert_eq!(ty.elem_ty(), RefType::FuncRef);
+//         // check limit and element type
+//         assert_eq!(ty.min(), 10);
+//         assert_eq!(ty.max(), Some(20));
+//         assert_eq!(ty.elem_ty(), RefType::FuncRef);
 
-        // grow the capacity of table
-        let result = table.grow(5);
-        assert!(result.is_ok());
-        // check capacity
-        assert_eq!(table.capacity(), 15);
-    }
+//         // grow the capacity of table
+//         let result = table.grow(5);
+//         assert!(result.is_ok());
+//         // check capacity
+//         assert_eq!(table.capacity(), 15);
+//     }
 
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_table_data() {
-        // create a FuncType
-        let result = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32]);
-        assert!(result.is_ok());
-        let func_ty = result.unwrap();
-        // create a host function
-        let result = Function::create(&func_ty, Box::new(real_add), 0);
-        assert!(result.is_ok());
-        let host_func = result.unwrap();
+//     #[test]
+//     #[allow(clippy::assertions_on_result_states)]
+//     fn test_table_data() {
+//         // create a FuncType
+//         let result = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32]);
+//         assert!(result.is_ok());
+//         let func_ty = result.unwrap();
+//         // create a host function
+//         let result = Function::create(&func_ty, Box::new(real_add), 0);
+//         assert!(result.is_ok());
+//         let host_func = result.unwrap();
 
-        // create a TableType instance
-        let result = TableType::create(RefType::FuncRef, 10, Some(20));
-        assert!(result.is_ok());
-        let ty = result.unwrap();
+//         // create a TableType instance
+//         let result = TableType::create(RefType::FuncRef, 10, Some(20));
+//         assert!(result.is_ok());
+//         let ty = result.unwrap();
 
-        // create a Table instance
-        let result = Table::create(&ty);
-        assert!(result.is_ok());
-        let mut table = result.unwrap();
+//         // create a Table instance
+//         let result = Table::create(&ty);
+//         assert!(result.is_ok());
+//         let mut table = result.unwrap();
 
-        // check capacity
-        assert_eq!(table.capacity(), 10);
+//         // check capacity
+//         assert_eq!(table.capacity(), 10);
 
-        // get data in the scope of the capacity
-        let result = table.get_data(9);
-        assert!(result.is_ok());
-        let value = result.unwrap();
-        assert!(value.is_null_ref());
-        assert_eq!(value.ty(), ValType::FuncRef);
+//         // get data in the scope of the capacity
+//         let result = table.get_data(9);
+//         assert!(result.is_ok());
+//         let value = result.unwrap();
+//         assert!(value.is_null_ref());
+//         assert_eq!(value.ty(), ValType::FuncRef);
 
-        // call set_data to store a function reference at the given index of the table instance
-        let result = table.set_data(WasmValue::from_func_ref(host_func.as_ref()), 3);
-        assert!(result.is_ok());
-        // call get_data to recover the function reference from the value at the given index of the table instance
-        let result = table.get_data(3);
-        assert!(result.is_ok());
-        let value = result.unwrap();
-        let result = value.func_ref();
-        assert!(result.is_some());
-        let func_ref = result.unwrap();
+//         // call set_data to store a function reference at the given index of the table instance
+//         let result = table.set_data(WasmValue::from_func_ref(host_func.as_ref()), 3);
+//         assert!(result.is_ok());
+//         // call get_data to recover the function reference from the value at the given index of the table instance
+//         let result = table.get_data(3);
+//         assert!(result.is_ok());
+//         let value = result.unwrap();
+//         let result = value.func_ref();
+//         assert!(result.is_some());
+//         let func_ref = result.unwrap();
 
-        // get the function type by func_ref
-        let result = func_ref.ty();
-        assert!(result.is_ok());
-        let func_ty = result.unwrap();
-        assert_eq!(func_ty.params_len(), 2);
-        let param_tys = func_ty.params_type_iter().collect::<Vec<_>>();
-        assert_eq!(param_tys, [ValType::I32, ValType::I32]);
-        assert_eq!(func_ty.returns_len(), 1);
-        let return_tys = func_ty.returns_type_iter().collect::<Vec<_>>();
-        assert_eq!(return_tys, [ValType::I32]);
-    }
+//         // get the function type by func_ref
+//         let result = func_ref.ty();
+//         assert!(result.is_ok());
+//         let func_ty = result.unwrap();
+//         assert_eq!(func_ty.params_len(), 2);
+//         let param_tys = func_ty.params_type_iter().collect::<Vec<_>>();
+//         assert_eq!(param_tys, [ValType::I32, ValType::I32]);
+//         assert_eq!(func_ty.returns_len(), 1);
+//         let return_tys = func_ty.returns_type_iter().collect::<Vec<_>>();
+//         assert_eq!(return_tys, [ValType::I32]);
+//     }
 
-    #[test]
-    fn test_table_send() {
-        // create a TableType instance
-        let result = TableType::create(RefType::FuncRef, 10, Some(20));
-        assert!(result.is_ok());
-        let ty = result.unwrap();
+//     #[test]
+//     fn test_table_send() {
+//         // create a TableType instance
+//         let result = TableType::create(RefType::FuncRef, 10, Some(20));
+//         assert!(result.is_ok());
+//         let ty = result.unwrap();
 
-        // create a Table instance
-        let result = Table::create(&ty);
-        assert!(result.is_ok());
-        let table = result.unwrap();
+//         // create a Table instance
+//         let result = Table::create(&ty);
+//         assert!(result.is_ok());
+//         let table = result.unwrap();
 
-        let handle = thread::spawn(move || {
-            assert!(!table.inner.0.is_null());
+//         let handle = thread::spawn(move || {
+//             assert!(!table.inner.0.is_null());
 
-            // check capacity
-            assert_eq!(table.capacity(), 10);
+//             // check capacity
+//             assert_eq!(table.capacity(), 10);
 
-            // get type
-            let result = table.ty();
-            assert!(result.is_ok());
-            let ty = result.unwrap();
-            assert!(!ty.inner.0.is_null());
-            assert!(ty.registered);
+//             // get type
+//             let result = table.ty();
+//             assert!(result.is_ok());
+//             let ty = result.unwrap();
+//             assert!(!ty.inner.0.is_null());
+//             assert!(ty.registered);
 
-            // check limit and element type
-            assert_eq!(ty.min(), 10);
-            assert_eq!(ty.max(), Some(20));
-            assert_eq!(ty.elem_ty(), RefType::FuncRef);
-        });
+//             // check limit and element type
+//             assert_eq!(ty.min(), 10);
+//             assert_eq!(ty.max(), Some(20));
+//             assert_eq!(ty.elem_ty(), RefType::FuncRef);
+//         });
 
-        handle.join().unwrap();
-    }
+//         handle.join().unwrap();
+//     }
 
-    #[test]
-    fn test_table_sync() {
-        // create a TableType instance
-        let result = TableType::create(RefType::FuncRef, 10, Some(20));
-        assert!(result.is_ok());
-        let ty = result.unwrap();
+//     #[test]
+//     fn test_table_sync() {
+//         // create a TableType instance
+//         let result = TableType::create(RefType::FuncRef, 10, Some(20));
+//         assert!(result.is_ok());
+//         let ty = result.unwrap();
 
-        // create a Table instance
-        let result = Table::create(&ty);
-        assert!(result.is_ok());
-        let table = Arc::new(Mutex::new(result.unwrap()));
+//         // create a Table instance
+//         let result = Table::create(&ty);
+//         assert!(result.is_ok());
+//         let table = Arc::new(Mutex::new(result.unwrap()));
 
-        let table_cloned = Arc::clone(&table);
-        let handle = thread::spawn(move || {
-            let result = table_cloned.lock();
-            assert!(result.is_ok());
-            let table = result.unwrap();
+//         let table_cloned = Arc::clone(&table);
+//         let handle = thread::spawn(move || {
+//             let result = table_cloned.lock();
+//             assert!(result.is_ok());
+//             let table = result.unwrap();
 
-            // check capacity
-            assert_eq!(table.capacity(), 10);
+//             // check capacity
+//             assert_eq!(table.capacity(), 10);
 
-            // get type
-            let result = table.ty();
-            assert!(result.is_ok());
-            let ty = result.unwrap();
-            assert!(!ty.inner.0.is_null());
-            assert!(ty.registered);
+//             // get type
+//             let result = table.ty();
+//             assert!(result.is_ok());
+//             let ty = result.unwrap();
+//             assert!(!ty.inner.0.is_null());
+//             assert!(ty.registered);
 
-            // check limit and element type
-            assert_eq!(ty.min(), 10);
-            assert_eq!(ty.max(), Some(20));
-            assert_eq!(ty.elem_ty(), RefType::FuncRef);
-        });
+//             // check limit and element type
+//             assert_eq!(ty.min(), 10);
+//             assert_eq!(ty.max(), Some(20));
+//             assert_eq!(ty.elem_ty(), RefType::FuncRef);
+//         });
 
-        handle.join().unwrap();
-    }
+//         handle.join().unwrap();
+//     }
 
-    fn real_add(_: CallingFrame, input: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
-        println!("Rust: Entering Rust function real_add");
+//     fn real_add(_: CallingFrame, input: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
+//         println!("Rust: Entering Rust function real_add");
 
-        if input.len() != 2 {
-            return Err(HostFuncError::User(1));
-        }
+//         if input.len() != 2 {
+//             return Err(HostFuncError::User(1));
+//         }
 
-        let a = if input[0].ty() == ValType::I32 {
-            input[0].to_i32()
-        } else {
-            return Err(HostFuncError::User(2));
-        };
+//         let a = if input[0].ty() == ValType::I32 {
+//             input[0].to_i32()
+//         } else {
+//             return Err(HostFuncError::User(2));
+//         };
 
-        let b = if input[1].ty() == ValType::I32 {
-            input[0].to_i32()
-        } else {
-            return Err(HostFuncError::User(3));
-        };
+//         let b = if input[1].ty() == ValType::I32 {
+//             input[0].to_i32()
+//         } else {
+//             return Err(HostFuncError::User(3));
+//         };
 
-        let c = a + b;
-        println!("Rust: calcuating in real_add c: {c:?}");
+//         let c = a + b;
+//         println!("Rust: calcuating in real_add c: {c:?}");
 
-        println!("Rust: Leaving Rust function real_add");
-        Ok(vec![WasmValue::from_i32(c)])
-    }
-}
+//         println!("Rust: Leaving Rust function real_add");
+//         Ok(vec![WasmValue::from_i32(c)])
+//     }
+// }

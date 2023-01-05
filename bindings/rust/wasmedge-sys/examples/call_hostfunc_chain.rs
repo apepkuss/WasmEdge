@@ -61,8 +61,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let func_ty = FuncType::create(vec![], vec![]).unwrap();
-    let host_layer1 = Function::create(&func_ty, Box::new(host_layer1), 0)?;
-    let host_layer2 = Function::create(&func_ty, Box::new(host_layer2), 0)?;
+    let (host_layer1, _) = Function::create(&func_ty, Box::new(host_layer1), 0)?;
+    let (host_layer2, _) = Function::create(&func_ty, Box::new(host_layer2), 0)?;
 
     let mut import = ImportModule::create("host")?;
     import.add_func("layer1", host_layer1);
