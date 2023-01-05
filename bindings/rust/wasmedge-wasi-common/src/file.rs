@@ -18,7 +18,11 @@ bitflags! {
     }
 }
 
-pub trait WasiFile: Send + Sync {}
+pub trait WasiFile: Send + Sync {
+    fn is_tty(&mut self) -> bool {
+        false
+    }
+}
 
 pub(crate) struct FileEntry {
     caps: FileCaps,
