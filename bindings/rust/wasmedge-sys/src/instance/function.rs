@@ -754,6 +754,23 @@ mod tests {
         assert!(result.is_ok());
         let returns = result.unwrap();
         assert_eq!(returns[0].to_i32(), 3);
+
+        drop(func_ty);
+
+        // get func type
+        let result = host_func.ty();
+        assert!(result.is_ok());
+        let ty = result.unwrap();
+
+        // check parameters
+        assert_eq!(ty.params_len(), 2);
+        let param_tys = ty.params_type_iter().collect::<Vec<_>>();
+        assert_eq!(param_tys, vec![ValType::I32; 2]);
+
+        // check returns
+        assert_eq!(ty.returns_len(), 1);
+        let return_tys = ty.returns_type_iter().collect::<Vec<_>>();
+        assert_eq!(return_tys, vec![ValType::I32]);
     }
 
     #[test]
