@@ -146,6 +146,7 @@ extern crate lazy_static;
 
 use parking_lot::{Mutex, RwLock};
 use std::{collections::HashMap, env, sync::Arc};
+use wasmedge_wasi::WasiEnviron;
 
 #[doc(hidden)]
 #[allow(warnings)]
@@ -225,7 +226,7 @@ pub use types::WasmValue;
 pub use validator::Validator;
 #[doc(inline)]
 pub use vm::Vm;
-use wasmedge_types::{error, WasmEdgeResult};
+use wasmedge_types::{error, HostRegistration, WasmEdgeResult};
 
 /// Type alias for a boxed native function. This type is used in thread-safe cases.
 pub type BoxedFn = Box<
@@ -243,6 +244,10 @@ lazy_static! {
                     .expect("MAX_HOST_FUNC_LENGTH should be a positive integer."))
                 .unwrap_or(500)
         ));
+}
+
+lazy_static! {
+    static ref WASI_ENVIRON: RwLock<WasiEnviron> = RwLock::new(WasiEnviron::new());
 }
 
 #[cfg(feature = "async")]

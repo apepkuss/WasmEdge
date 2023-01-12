@@ -13,6 +13,7 @@ repository = "https://github.com/WasmEdge/WasmEdge/blob/master/bindings/rust/was
 version = "0.12.3"
 
 [dependencies]
+cap-std = "1.0.3"
 lazy_static = "1.4.0"
 libc = "0.2.94"
 parking_lot = "0.12.1"
@@ -21,6 +22,9 @@ rand = "0.8.4"
 thiserror = "1.0.30"
 wasmedge-macro = {path = "../wasmedge-macro", version = "0.3"}
 wasmedge-types = {path = "../wasmedge-types", version = "0.4"}
+wasmedge-wasi = {path = "/Volumes/Dev/secondstate/me/wasmedge-wasi/wasmedge-wasi"}
+wasmedge-wasi-common = {path = "/Volumes/Dev/secondstate/me/wasmedge-wasi/wasmedge-wasi-common"}
+# wasmedge-wasi-for-quark = {version = "0.1.0", path = "/Volumes/Dev/secondstate/me/wasmedge-wasi-for-quark"}
 wasmtime-fiber = {version = "2", optional = true}
 wat = "1.0"
 
@@ -30,13 +34,12 @@ cmake = "0.1"
 
 [dev-dependencies]
 anyhow = "1"
-tokio = {version = "1", features = ["full"]}
 
 [features]
 aot = []
 async = ["wasmtime-fiber"]
 default = []
 standalone = []
+static = []
 wasi_crypto = []
 wasi_nn = []
-static = []
