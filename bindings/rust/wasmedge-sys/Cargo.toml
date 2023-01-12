@@ -24,7 +24,6 @@ wasmedge-macro = {path = "../wasmedge-macro", version = "0.3"}
 wasmedge-types = {path = "../wasmedge-types", version = "0.4"}
 wasmedge-wasi = {path = "/Volumes/Dev/secondstate/me/wasmedge-wasi/wasmedge-wasi"}
 wasmedge-wasi-common = {path = "/Volumes/Dev/secondstate/me/wasmedge-wasi/wasmedge-wasi-common"}
-# wasmedge-wasi-for-quark = {version = "0.1.0", path = "/Volumes/Dev/secondstate/me/wasmedge-wasi-for-quark"}
 wasmtime-fiber = {version = "2", optional = true}
 wat = "1.0"
 
@@ -34,6 +33,7 @@ cmake = "0.1"
 
 [dev-dependencies]
 anyhow = "1"
+tokio = {version = "1", features = ["full"]}
 
 [features]
 aot = []
