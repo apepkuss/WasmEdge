@@ -1464,6 +1464,9 @@ impl Drop for NewVm {
 
         // drop imports
         self.imports.drain();
+
+        // drop host_registered_modules
+        self.host_registered_modules.drain();
     }
 }
 impl Engine for NewVm {
@@ -1550,7 +1553,8 @@ mod tests {
 
     #[test]
     fn test_vm_register_import_custom_wasi() -> Result<(), Box<dyn std::error::Error>> {
-        use crate::instance::module::{Ciovec, CiovecArray};
+        use std::mem::MaybeUninit;
+        use wasmedge_wasi_common::{Ciovec, CiovecArray};
 
         let mut vm = NewVm::create(None, None)?;
 
@@ -1568,23 +1572,36 @@ mod tests {
         let result = vm.run_func(&fn_args_sizes_get, []);
         assert!(result.is_ok());
         let returns = result.unwrap();
-        dbg!(&returns[0].to_i32());
-        dbg!(&returns[1].to_i32());
+        assert_eq!((returns[0].to_i32(), returns[1].to_i32()), (2, 10));
 
-        // run `args_sizes_get`
+        // run `args_get`
+        let mut iovs: MaybeUninit<Vec<Ciovec>> = MaybeUninit::uninit();
+        let fn_args_get = custom_wasi_module.get_func("args_get")?;
+        let result = vm.run_func(&fn_args_get, [WasmValue::from_extern_ref(&mut iovs)]);
+        assert!(result.is_ok());
+        let iovs = unsafe { iovs.assume_init() };
+        // parse the arguments returned
+        let mut args_get = vec![];
+        for iov in iovs {
+            let buf = unsafe { std::slice::from_raw_parts(iov.buf, iov.buf_len) };
+            let s = std::str::from_utf8(buf).unwrap();
+            args_get.push(s);
+        }
+        assert_eq!(args_get, ["arg1", "arg2"]);
+
+        // run `environ_sizes_get`
         let fn_environ_sizes_get = custom_wasi_module.get_func("environ_sizes_get")?;
         let result = vm.run_func(&fn_environ_sizes_get, []);
         assert!(result.is_ok());
         let returns = result.unwrap();
-        dbg!(&returns[0].to_i32());
-        dbg!(&returns[1].to_i32());
+        assert_eq!((returns[0].to_i32(), returns[1].to_i32()), (3, 30));
 
         // run `fd_write`
         let fn_fd_write = custom_wasi_module.get_func("fd_write")?;
         let s = "Hello, world!";
         let iov = Ciovec {
             buf: s.as_ptr(),
-            buf_len: s.len(),
+            buf_len: s.as_bytes().len(),
         };
         let mut iovs: CiovecArray<'_> = &[iov];
         let result = vm.run_func(
@@ -1596,7 +1613,7 @@ mod tests {
         );
         assert!(result.is_ok());
         let returns = result.unwrap();
-        dbg!(&returns[0].to_i32());
+        assert_eq!(returns[0].to_i32(), 13);
 
         // run `proc_exit`
         let fn_proc_exit = custom_wasi_module.get_func("proc_exit")?;
