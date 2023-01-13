@@ -299,6 +299,19 @@ impl WasmValue {
             }
         }
     }
+
+    pub fn extern_ref_mut<T>(&self) -> Option<&mut T> {
+        unsafe {
+            match ffi::WasmEdge_ValueIsNullRef(self.ctx) {
+                true => None,
+                false => {
+                    let ptr = ffi::WasmEdge_ValueGetExternRef(self.ctx);
+                    let x = ptr as *mut T;
+                    Some(&mut *x)
+                }
+            }
+        }
+    }
 }
 impl From<ffi::WasmEdge_Value> for WasmValue {
     fn from(raw_val: ffi::WasmEdge_Value) -> Self {
