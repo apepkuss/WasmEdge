@@ -12,10 +12,10 @@ use crate::{
     types::WasmEdgeString,
     CallingFrame, Function, Global, Memory, Table, WasmEdgeResult, WasmValue, WASI_ENVIRON,
 };
-use std::sync::Arc;
+use std::{mem::MaybeUninit, sync::Arc};
 use wasmedge_types::ValType;
 
-use wasmedge_wasi_common::WasiSnapshotPreview1;
+use wasmedge_wasi_common::{Ciovec, CiovecArray, WasiSnapshotPreview1};
 
 /// An [Instance] represents an instantiated module. In the instantiation process, An [Instance] is created from al[Module](crate::Module). From an [Instance] the exported [functions](crate::Function), [tables](crate::Table), [memories](crate::Memory), and [globals](crate::Global) can be fetched.
 ///
@@ -1029,6 +1029,11 @@ impl CustomWasiModule {
             "environ_sizes_get",
             Function::create(&ty, Box::new(wasi_environ_sizes_get), 0)?,
         );
+        let ty = FuncType::create(vec![ValType::ExternRef], vec![])?;
+        custom_wasi_module.add_func(
+            "args_get",
+            Function::create(&ty, Box::new(wasi_args_get), 0)?,
+        );
 
         Ok(custom_wasi_module)
     }
@@ -1430,6 +1435,25 @@ fn wasi_args_sizes_get(
     ])
 }
 
+/// `args_get` wasi host function
+fn wasi_args_get(_cf: CallingFrame, args: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
+    println!(">>> wasi_args_get begins");
+
+    let wasi_environ = WASI_ENVIRON.read();
+
+    let mut args_vec = Vec::new();
+    wasi_environ.args_get(&mut args_vec);
+
+    let out = args[0]
+        .extern_ref_mut::<MaybeUninit<Vec<Ciovec>>>()
+        .unwrap();
+    out.write(args_vec);
+
+    println!("<<< wasi_args_get ends");
+
+    Ok(vec![])
+}
+
 fn wasi_environ_sizes_get(
     _cf: CallingFrame,
     _args: Vec<WasmValue>,
@@ -1445,17 +1469,6 @@ fn wasi_environ_sizes_get(
         WasmValue::from_i32(n_bytes),
     ])
 }
-
-pub type Size = usize;
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct Ciovec {
-    /// The address of the buffer to be written.
-    pub buf: *const u8,
-    /// The length of the buffer to be written.
-    pub buf_len: Size,
-}
-pub type CiovecArray<'a> = &'a [Ciovec];
 
 /// A [WasmEdgeProcessModule] is a module instance for the WasmEdge_Process specification.
 ///
