@@ -1596,6 +1596,21 @@ mod tests {
         let returns = result.unwrap();
         assert_eq!((returns[0].to_i32(), returns[1].to_i32()), (3, 30));
 
+        // run `environ_get`
+        let mut iovs: MaybeUninit<Vec<Ciovec>> = MaybeUninit::uninit();
+        let fn_environ_get = custom_wasi_module.get_func("environ_get")?;
+        let result = vm.run_func(&fn_environ_get, [WasmValue::from_extern_ref(&mut iovs)]);
+        assert!(result.is_ok());
+        let iovs = unsafe { iovs.assume_init() };
+        // parse the environment variables returned
+        let mut envs_get = vec![];
+        for iov in iovs {
+            let buf = unsafe { std::slice::from_raw_parts(iov.buf, iov.buf_len) };
+            let s = std::str::from_utf8(buf).unwrap();
+            envs_get.push(s);
+        }
+        assert_eq!(envs_get, ["ENV1=VAL1", "ENV2=VAL2", "ENV3=VAL3"]);
+
         // run `fd_write`
         let fn_fd_write = custom_wasi_module.get_func("fd_write")?;
         let s = "Hello, world!";
