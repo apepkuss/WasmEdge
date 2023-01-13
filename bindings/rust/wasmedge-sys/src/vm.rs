@@ -1300,6 +1300,22 @@ impl NewVm {
                     .get(&HostRegistration::Wasi)
                     .unwrap()
             }
+            ImportObject::WasmEdgeProcess(import_mod) => {
+                if self
+                    .host_registered_modules
+                    .contains_key(&HostRegistration::WasmEdgeProcess)
+                {
+                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                } else {
+                    self.host_registered_modules.insert(
+                        HostRegistration::WasmEdgeProcess,
+                        ImportObject::WasmEdgeProcess(import_mod),
+                    );
+                }
+                self.host_registered_modules
+                    .get(&HostRegistration::WasmEdgeProcess)
+                    .unwrap()
+            }
             _ => panic!("error"),
         };
 
@@ -1416,6 +1432,32 @@ impl NewVm {
             .unwrap();
         match import {
             ImportObject::Wasi(wasi_module) => Ok(wasi_module),
+            _ => panic!("error"),
+        }
+    }
+
+    pub fn wasmedge_process_module(&self) -> WasmEdgeResult<&WasmEdgeProcessModule> {
+        let import = self
+            .host_registered_modules
+            .get(&HostRegistration::WasmEdgeProcess)
+            .unwrap();
+        match import {
+            ImportObject::WasmEdgeProcess(wasmedge_process_module) => Ok(wasmedge_process_module),
+            _ => panic!("error"),
+        }
+    }
+
+    /// Returns the mutable [WasmEdgeProcess module instance](crate::WasmEdgeProcessModule).
+    ///
+    /// Notice that this function is only available when a [config](crate::Config) with the enabled [wasmedge_process](crate::Config::wasmedge_process) option is used in the creation of this [Vm].
+    #[cfg(target_os = "linux")]
+    pub fn wasmedge_process_module_mut(&mut self) -> WasmEdgeResult<&mut WasmEdgeProcessModule> {
+        let import = self
+            .host_registered_modules
+            .get_mut(&HostRegistration::WasmEdgeProcess)
+            .unwrap();
+        match import {
+            ImportObject::WasmEdgeProcess(wasmedge_process_module) => Ok(wasmedge_process_module),
             _ => panic!("error"),
         }
     }
