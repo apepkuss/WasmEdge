@@ -1034,6 +1034,11 @@ impl CustomWasiModule {
             "args_get",
             Function::create(&ty, Box::new(wasi_args_get), 0)?,
         );
+        let ty = FuncType::create(vec![ValType::ExternRef], vec![])?;
+        custom_wasi_module.add_func(
+            "environ_get",
+            Function::create(&ty, Box::new(wasi_environ_get), 0)?,
+        );
 
         Ok(custom_wasi_module)
     }
@@ -1468,6 +1473,28 @@ fn wasi_environ_sizes_get(
         WasmValue::from_i32(n_envs),
         WasmValue::from_i32(n_bytes),
     ])
+}
+
+/// `environ_get` wasi host function
+fn wasi_environ_get(
+    _cf: CallingFrame,
+    args: Vec<WasmValue>,
+) -> Result<Vec<WasmValue>, HostFuncError> {
+    println!(">>> wasi_environ_get begins");
+
+    let wasi_environ = WASI_ENVIRON.read();
+
+    let mut envs_vec = Vec::new();
+    wasi_environ.environ_get(&mut envs_vec);
+
+    let out = args[0]
+        .extern_ref_mut::<MaybeUninit<Vec<Ciovec>>>()
+        .unwrap();
+    out.write(envs_vec);
+
+    println!("<<< wasi_environ_get ends");
+
+    Ok(vec![])
 }
 
 /// A [WasmEdgeProcessModule] is a module instance for the WasmEdge_Process specification.
