@@ -32,7 +32,6 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 use wasmedge_types::HostRegistration;
 
 pub struct NewVm {
-    // pub(crate) inner: Arc<InnerVm>,
     imports: HashMap<String, ImportObject>,
     host_registered_modules: HashMap<HostRegistration, ImportObject>,
     executor: Executor,
@@ -41,7 +40,8 @@ pub struct NewVm {
     stat: Statistics,
     loader: Loader,
     validator: Validator,
-    instances: HashMap<String, Instance>,
+    named_instances: HashMap<String, Instance>,
+    active_instance: Option<Instance>,
 }
 impl NewVm {
     /// Creates a new [Vm] to be associated with the given [configuration](crate::Config) and [store](crate::Store).
@@ -76,7 +76,8 @@ impl NewVm {
             stat,
             loader,
             validator,
-            instances: HashMap::new(),
+            named_instances: HashMap::new(),
+            active_instance: None,
         };
 
         if vm.config.wasi_enabled() {
@@ -573,14 +574,14 @@ impl NewVm {
         let instance =
             self.executor
                 .register_named_module(&mut self.store, &module, mod_name.as_ref())?;
-        match self.instances.contains_key(mod_name.as_ref()) {
+        match self.named_instances.contains_key(mod_name.as_ref()) {
             true => {
                 return Err(Box::new(WasmEdgeError::Vm(
                     VmError::DuplicateModuleInstance(mod_name.as_ref().to_string()),
                 )));
             }
             false => {
-                self.instances
+                self.named_instances
                     .insert(mod_name.as_ref().to_string(), instance);
             }
         }
@@ -676,6 +677,152 @@ impl NewVm {
 
         // register module
         self.register_wasm_from_module(mod_name, &ast_module)
+    }
+
+    pub fn register_active_instance_from_file(
+        &mut self,
+        file: impl AsRef<Path>,
+    ) -> WasmEdgeResult<()> {
+        // load module from file
+        let ast_module = self.loader.from_file(file.as_ref())?;
+
+        // register active instance
+        self.register_active_instance_from_module(&ast_module)
+    }
+
+    pub fn register_active_instance_from_bytes(
+        &mut self,
+        bytes: impl AsRef<[u8]>,
+    ) -> WasmEdgeResult<()> {
+        // load module from file
+        let ast_module = self.loader.from_bytes(bytes.as_ref())?;
+
+        // register active instance
+        self.register_active_instance_from_module(&ast_module)
+    }
+
+    pub fn register_active_instance_from_module(&mut self, module: &Module) -> WasmEdgeResult<()> {
+        // validate module
+        self.validator.validate(module)?;
+
+        // register module
+        let instance = self
+            .executor
+            .register_active_module(&mut self.store, module)?;
+
+        self.active_instance = Some(instance);
+
+        Ok(())
+    }
+
+    /// Runs a [function](crate::Function) defined in a WASM file.
+    ///
+    /// The workflow of the function can be summarized as the following steps:
+    ///
+    /// * First, loads the WASM module from a given WASM file, and validates the loaded module; then,
+    ///
+    /// * Instantiates the WASM module; finally,
+    ///
+    /// * Invokes a function by name and parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - A wasm file or an AOT wasm file.
+    ///
+    /// * `func_name` - The name of the [function](crate::Function).
+    ///
+    /// * `params` - The the parameter values which are used by the [function](crate::Function).
+    ///
+    /// # Error
+    ///
+    /// If fail to run, then an error is returned.
+    pub fn run_wasm_from_file(
+        &mut self,
+        file: impl AsRef<Path>,
+        func_name: impl AsRef<str>,
+        params: impl IntoIterator<Item = WasmValue>,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        // register active instance
+        self.register_active_instance_from_file(file.as_ref())?;
+
+        let func = self
+            .active_instance()
+            .unwrap()
+            .get_func(func_name.as_ref())?;
+
+        self.executor.run_func(&func, params)
+    }
+
+    /// Runs an exported WASM function by name. The WASM function is hosted by the anonymous [module](crate::Module) in
+    /// the [store](crate::Store) of the [Vm].
+    ///
+    /// This is the final step to invoke a WASM function step by step. After instantiating a WASM module in the [Vm], the WASM module is registered into the [store](crate::Store) of the [Vm] as an anonymous module. Then repeatedly call this function to invoke the exported WASM functions by their names until the [Vm] is reset or a new WASM module is registered or loaded.
+    ///
+    /// # Arguments
+    ///
+    /// * `func_name` - The name of the exported WASM function to run.
+    ///
+    /// * `params` - The parameter values passed to the exported WASM function.
+    ///
+    /// # Error
+    ///
+    /// If fail to run the WASM function, then an error is returned.
+    pub fn run_function(
+        &mut self,
+        func_name: impl AsRef<str>,
+        params: impl IntoIterator<Item = WasmValue>,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        match self.active_instance() {
+            Some(instance) => {
+                let func = instance.get_func(func_name.as_ref())?;
+                self.executor.run_func(&func, params)
+            }
+            None => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundActiveModule))),
+        }
+    }
+
+    /// Runs an exported WASM function by its name and the module's name in which the WASM function is hosted.
+    ///
+    /// After registering a WASM module in the [Vm], repeatedly call this function to run exported WASM functions by their function names and the module names until the [Vm] is reset.
+    ///
+    /// # Arguments
+    ///
+    /// * `mod_name` - The name of the WASM module registered into the [store](crate::Store) of the [Vm].
+    ///
+    /// * `func_name` - The name of the exported WASM function to run.
+    ///
+    /// * `params` - The parameter values passed to the exported WASM function.
+    ///
+    /// # Error
+    ///
+    /// If fail to run the WASM function, then an error is returned.
+    pub fn run_registered_function(
+        &mut self,
+        mod_name: impl AsRef<str>,
+        func_name: impl AsRef<str>,
+        params: impl IntoIterator<Item = WasmValue>,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        // get the registered instance
+        let instance = self.store.module(mod_name.as_ref())?;
+
+        // get the target function
+        let func = instance.get_func(func_name.as_ref())?;
+
+        // run the function
+        self.executor().run_func(&func, params)
+    }
+
+    /// Returns the active (also called anonymous) module instance.
+    pub fn active_instance(&self) -> Option<&Instance> {
+        self.active_instance.as_ref()
+    }
+
+    pub fn active_instance_mut(&mut self) -> Option<&mut Instance> {
+        self.active_instance.as_mut()
+    }
+
+    pub fn registered_module(&mut self, mod_name: impl AsRef<str>) -> WasmEdgeResult<Instance> {
+        self.store.module(mod_name.as_ref())
     }
 }
 impl Drop for NewVm {
@@ -1163,6 +1310,69 @@ mod tests {
                 vm.register_wasm_from_import(ImportObject::WasmEdgeProcess(import_process));
             assert!(result.is_ok());
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vm_new_run_wasm_from_file() -> Result<(), Box<dyn std::error::Error>> {
+        // create a Config context
+        let mut config = Config::create()?;
+        config.bulk_memory_operations(true);
+        assert!(config.bulk_memory_operations_enabled());
+
+        // create a Vm context with the given Config
+        let result = NewVm::create(Some(config));
+        assert!(result.is_ok());
+        let mut vm = result.unwrap();
+
+        // run a function from a wasm file
+        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
+            .join("bindings/rust/wasmedge-sys/tests/data/fibonacci.wat");
+        let result = vm.run_wasm_from_file(&path, "fib", [WasmValue::from_i32(5)]);
+        assert!(result.is_ok());
+        let returns = result.unwrap();
+        assert_eq!(returns[0].to_i32(), 8);
+
+        // run a function from a non-existent file
+        let result = vm.run_wasm_from_file("no_file.wasm", "fib", [WasmValue::from_i32(5)]);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Core(CoreError::Load(
+                CoreLoadError::IllegalPath
+            )))
+        );
+
+        // run a function from a WASM file with the empty parameters
+        let result = vm.run_wasm_from_file(&path, "fib", []);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Core(CoreError::Execution(
+                CoreExecutionError::FuncTypeMismatch
+            )))
+        );
+
+        // run a function from a WASM file with the parameters of wrong type
+        let result = vm.run_wasm_from_file(&path, "fib", [WasmValue::from_i64(5)]);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Core(CoreError::Execution(
+                CoreExecutionError::FuncTypeMismatch
+            )))
+        );
+
+        // fun a function: the specified function name is non-existent
+        let result = vm.run_wasm_from_file(&path, "fib2", [WasmValue::from_i32(5)]);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Instance(InstanceError::NotFoundFunc(
+                "fib2".into()
+            )))
+        );
 
         Ok(())
     }
