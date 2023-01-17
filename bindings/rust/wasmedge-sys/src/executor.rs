@@ -78,6 +78,7 @@ impl Executor {
                     import.inner.0 as *const _,
                 ))?;
             },
+            #[cfg(not(feature = "custom_wasi"))]
             ImportObject::Wasi(import) => unsafe {
                 check(ffi::WasmEdge_ExecutorRegisterImport(
                     self.inner.0,
@@ -85,6 +86,7 @@ impl Executor {
                     import.inner.0 as *const _,
                 ))?;
             },
+            #[cfg(feature = "custom_wasi")]
             ImportObject::CustomWasi(import) => unsafe {
                 check(ffi::WasmEdge_ExecutorRegisterImport(
                     self.inner.0,

@@ -1,0 +1,1194 @@
+//! Defines WasmEdge Vm struct.
+
+#[cfg(feature = "custom_wasi")]
+use crate::instance::custom_wasi_module::CustomWasiModule;
+#[cfg(not(feature = "custom_wasi"))]
+use crate::instance::module::WasiModule;
+#[cfg(feature = "async")]
+use crate::r#async::FiberFuture;
+#[cfg(all(target_os = "linux", feature = "wasi_nn", target_arch = "x86_64"))]
+use crate::WasiNnModule;
+#[cfg(target_os = "linux")]
+use crate::WasmEdgeProcessModule;
+use crate::{
+    error::{VmError, WasmEdgeError},
+    executor::{Executor, InnerExecutor},
+    ffi,
+    instance::function::{FuncRef, FuncType, Function, InnerFuncType},
+    loader::{InnerLoader, Loader},
+    statistics::{InnerStat, Statistics},
+    store::{InnerStore, Store},
+    types::WasmEdgeString,
+    utils::{self, check},
+    validator::{InnerValidator, Validator},
+    Config, Engine, ImportObject, Instance, Module, WasmEdgeResult, WasmValue,
+};
+#[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
+use crate::{
+    WasiCrypto, WasiCryptoAsymmetricCommonModule, WasiCryptoCommonModule, WasiCryptoKxModule,
+    WasiCryptoSignaturesModule, WasiCryptoSymmetricModule,
+};
+use std::{collections::HashMap, path::Path, sync::Arc};
+use wasmedge_types::HostRegistration;
+
+pub struct NewVm {
+    // pub(crate) inner: Arc<InnerVm>,
+    imports: HashMap<String, ImportObject>,
+    host_registered_modules: HashMap<HostRegistration, ImportObject>,
+    executor: Executor,
+    store: Store,
+    config: Config,
+    stat: Statistics,
+    loader: Loader,
+    validator: Validator,
+    instances: HashMap<String, Instance>,
+}
+impl NewVm {
+    /// Creates a new [Vm] to be associated with the given [configuration](crate::Config) and [store](crate::Store).
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - A configuration for the new [Vm].
+    ///
+    /// * `store` - An external WASM [store](crate::Store) used by the new [Vm]. The instantiation and execution of the new [Vm] will consume this store context. If no store context is specified when creating a [Vm], then the [Vm] itself will allocate and own a [store](crate::Store).
+    ///
+    /// # Error
+    ///
+    /// If fail to create, then an error is returned.
+    pub fn create(config: Option<Config>) -> WasmEdgeResult<Self> {
+        let config = match config {
+            Some(config) => config,
+            None => Config::create()?,
+        };
+
+        let store = Store::create()?;
+        let mut stat = Statistics::create()?;
+        let executor = Executor::create(Some(config.clone()), Some(&mut stat))?;
+        let loader = Loader::create(Some(config.clone()))?;
+        let validator = Validator::create(Some(config.clone()))?;
+
+        let mut vm = Self {
+            imports: HashMap::new(),
+            host_registered_modules: HashMap::new(),
+            executor,
+            store,
+            config,
+            stat,
+            loader,
+            validator,
+            instances: HashMap::new(),
+        };
+
+        if vm.config.wasi_enabled() {
+            #[cfg(not(feature = "custom_wasi"))]
+            vm.register_wasm_from_import(ImportObject::Wasi(WasiModule::create(
+                None, None, None,
+            )?))?;
+            #[cfg(feature = "custom_wasi")]
+            vm.register_wasm_from_import(ImportObject::CustomWasi(CustomWasiModule::create(
+                None, None, None,
+            )?))?;
+        }
+
+        #[cfg(target_os = "linux")]
+        if vm.config.wasmedge_process_enabled() {
+            vm.register_wasm_from_import(ImportObject::WasmEdgeProcess(
+                WasmEdgeProcessModule::create(None, false)?,
+            ))?;
+        }
+
+        Ok(vm)
+    }
+
+    #[cfg(feature = "custom_wasi")]
+    pub fn custom_wasi_module(&self) -> WasmEdgeResult<&CustomWasiModule> {
+        if self.config.wasi_enabled() {
+            match self
+                .host_registered_modules
+                .contains_key(&HostRegistration::Wasi)
+            {
+                true => {
+                    let wasi_module = self
+                        .host_registered_modules
+                        .get(&HostRegistration::Wasi)
+                        .unwrap();
+                    match wasi_module {
+                        ImportObject::CustomWasi(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+            }
+        } else {
+            match self.imports.contains_key("wasi_snapshot_preview1") {
+                true => {
+                    let wasi_module = self.imports.get("wasi_snapshot_preview1").unwrap();
+                    match wasi_module {
+                        ImportObject::CustomWasi(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+            }
+        }
+    }
+
+    #[cfg(feature = "custom_wasi")]
+    pub fn custom_wasi_module_mut(&mut self) -> WasmEdgeResult<&mut CustomWasiModule> {
+        if self.config.wasi_enabled() {
+            match self
+                .host_registered_modules
+                .contains_key(&HostRegistration::Wasi)
+            {
+                true => {
+                    let wasi_module = self
+                        .host_registered_modules
+                        .get_mut(&HostRegistration::Wasi)
+                        .unwrap();
+                    match wasi_module {
+                        ImportObject::CustomWasi(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+            }
+        } else {
+            match self.imports.contains_key("wasi_snapshot_preview1") {
+                true => {
+                    let wasi_module = self.imports.get_mut("wasi_snapshot_preview1").unwrap();
+                    match wasi_module {
+                        ImportObject::CustomWasi(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+            }
+        }
+    }
+
+    #[cfg(not(feature = "custom_wasi"))]
+    pub fn wasi_module(&self) -> WasmEdgeResult<&WasiModule> {
+        if self.config.wasi_enabled() {
+            match self
+                .host_registered_modules
+                .contains_key(&HostRegistration::Wasi)
+            {
+                true => {
+                    let wasi_module = self
+                        .host_registered_modules
+                        .get(&HostRegistration::Wasi)
+                        .unwrap();
+                    match wasi_module {
+                        ImportObject::Wasi(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+            }
+        } else {
+            match self.imports.contains_key("wasi_snapshot_preview1") {
+                true => {
+                    let wasi_module = self.imports.get("wasi_snapshot_preview1").unwrap();
+                    match wasi_module {
+                        ImportObject::Wasi(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+            }
+        }
+    }
+
+    #[cfg(not(feature = "custom_wasi"))]
+    pub fn wasi_module_mut(&mut self) -> WasmEdgeResult<&mut WasiModule> {
+        if self.config.wasi_enabled() {
+            match self
+                .host_registered_modules
+                .contains_key(&HostRegistration::Wasi)
+            {
+                true => {
+                    let wasi_module = self
+                        .host_registered_modules
+                        .get_mut(&HostRegistration::Wasi)
+                        .unwrap();
+                    match wasi_module {
+                        ImportObject::Wasi(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+            }
+        } else {
+            match self.imports.contains_key("wasi_snapshot_preview1") {
+                true => {
+                    let wasi_module = self.imports.get_mut("wasi_snapshot_preview1").unwrap();
+                    match wasi_module {
+                        ImportObject::Wasi(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))),
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn wasmedge_process_module(&self) -> WasmEdgeResult<&WasmEdgeProcessModule> {
+        if self.config.wasmedge_process_enabled() {
+            match self
+                .host_registered_modules
+                .contains_key(&HostRegistration::WasmEdgeProcess)
+            {
+                true => {
+                    let wasmedge_process_module = self
+                        .host_registered_modules
+                        .get(&HostRegistration::WasmEdgeProcess)
+                        .unwrap();
+                    match wasmedge_process_module {
+                        ImportObject::WasmEdgeProcess(wasmedge_process_module) => {
+                            Ok(wasmedge_process_module)
+                        }
+                        _ => Err(Box::new(WasmEdgeError::Vm(
+                            VmError::NotFoundWasmEdgeProcessModule,
+                        ))),
+                    }
+                }
+                false => {
+                    return Err(Box::new(WasmEdgeError::Vm(
+                        VmError::NotFoundWasmEdgeProcessModule,
+                    )))
+                }
+            }
+        } else {
+            match self.imports.contains_key("wasmedge_process") {
+                true => {
+                    let wasi_module = self.imports.get("wasmedge_process").unwrap();
+                    match wasi_module {
+                        ImportObject::WasmEdgeProcess(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(
+                            VmError::NotFoundWasmEdgeProcessModule,
+                        ))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(
+                    VmError::NotFoundWasmEdgeProcessModule,
+                ))),
+            }
+        }
+    }
+
+    /// Returns the mutable [WasmEdgeProcess module instance](crate::WasmEdgeProcessModule).
+    ///
+    /// Notice that this function is only available when a [config](crate::Config) with the enabled [wasmedge_process](crate::Config::wasmedge_process) option is used in the creation of this [Vm].
+    #[cfg(target_os = "linux")]
+    pub fn wasmedge_process_module_mut(&mut self) -> WasmEdgeResult<&mut WasmEdgeProcessModule> {
+        if self.config.wasmedge_process_enabled() {
+            match self
+                .host_registered_modules
+                .contains_key(&HostRegistration::WasmEdgeProcess)
+            {
+                true => {
+                    let wasmedge_process_module = self
+                        .host_registered_modules
+                        .get_mut(&HostRegistration::WasmEdgeProcess)
+                        .unwrap();
+                    match wasmedge_process_module {
+                        ImportObject::WasmEdgeProcess(wasmedge_process_module) => {
+                            Ok(wasmedge_process_module)
+                        }
+                        _ => Err(Box::new(WasmEdgeError::Vm(
+                            VmError::NotFoundWasmEdgeProcessModule,
+                        ))),
+                    }
+                }
+                false => {
+                    return Err(Box::new(WasmEdgeError::Vm(
+                        VmError::NotFoundWasmEdgeProcessModule,
+                    )))
+                }
+            }
+        } else {
+            match self.imports.contains_key("wasmedge_process") {
+                true => {
+                    let wasi_module = self.imports.get_mut("wasmedge_process").unwrap();
+                    match wasi_module {
+                        ImportObject::WasmEdgeProcess(wasi_module) => Ok(wasi_module),
+                        _ => Err(Box::new(WasmEdgeError::Vm(
+                            VmError::NotFoundWasmEdgeProcessModule,
+                        ))),
+                    }
+                }
+                false => Err(Box::new(WasmEdgeError::Vm(
+                    VmError::NotFoundWasmEdgeProcessModule,
+                ))),
+            }
+        }
+    }
+
+    pub fn store(&self) -> &Store {
+        &self.store
+    }
+
+    /// Returns the internal [Store](crate::Store) from the [Vm].
+    pub fn store_mut(&mut self) -> &mut Store {
+        &mut self.store
+    }
+
+    pub fn statistics(&self) -> &Statistics {
+        &self.stat
+    }
+
+    /// Returns the internal [Statistics](crate::Statistics) from the [Vm].
+    pub fn statistics_mut(&mut self) -> &mut Statistics {
+        &mut self.stat
+    }
+
+    /// Returns the internal [Executor](crate::Executor) from the [Vm].
+    pub fn executor(&self) -> &Executor {
+        &self.executor
+    }
+
+    pub fn executor_mut(&mut self) -> &mut Executor {
+        &mut self.executor
+    }
+
+    pub fn register_wasm_from_import(&mut self, import: ImportObject) -> WasmEdgeResult<()> {
+        let io_name: String = import.name().into();
+
+        match import {
+            ImportObject::Import(import_mod) => {
+                if self.imports.contains_key(&io_name) {
+                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                } else {
+                    self.imports
+                        .insert(io_name.clone(), ImportObject::Import(import_mod));
+                }
+                self.executor
+                    .register_import_object(&mut self.store, self.imports.get(&io_name).unwrap())
+            }
+            #[cfg(not(feature = "custom_wasi"))]
+            ImportObject::Wasi(import_mod) => {
+                if self.config.wasi_enabled() {
+                    if self
+                        .host_registered_modules
+                        .contains_key(&HostRegistration::Wasi)
+                    {
+                        return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                    } else {
+                        self.host_registered_modules
+                            .insert(HostRegistration::Wasi, ImportObject::Wasi(import_mod));
+                    }
+
+                    self.executor.register_import_object(
+                        &mut self.store,
+                        self.host_registered_modules
+                            .get(&HostRegistration::Wasi)
+                            .unwrap(),
+                    )
+                } else {
+                    if self.imports.contains_key(&io_name) {
+                        return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                    } else {
+                        self.imports
+                            .insert(io_name.clone(), ImportObject::Wasi(import_mod));
+                    }
+                    self.executor.register_import_object(
+                        &mut self.store,
+                        self.imports.get(&io_name).unwrap(),
+                    )
+                }
+            }
+            #[cfg(feature = "custom_wasi")]
+            ImportObject::CustomWasi(import_mod) => {
+                if self.config.wasi_enabled() {
+                    if self
+                        .host_registered_modules
+                        .contains_key(&HostRegistration::Wasi)
+                    {
+                        return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                    } else {
+                        self.host_registered_modules
+                            .insert(HostRegistration::Wasi, ImportObject::CustomWasi(import_mod));
+                    }
+
+                    self.executor.register_import_object(
+                        &mut self.store,
+                        self.host_registered_modules
+                            .get(&HostRegistration::Wasi)
+                            .unwrap(),
+                    )
+                } else {
+                    if self.imports.contains_key(&io_name) {
+                        return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                    } else {
+                        self.imports
+                            .insert(io_name.clone(), ImportObject::CustomWasi(import_mod));
+                    }
+                    self.executor.register_import_object(
+                        &mut self.store,
+                        self.imports.get(&io_name).unwrap(),
+                    )
+                }
+            }
+            #[cfg(target_os = "linux")]
+            ImportObject::WasmEdgeProcess(import_mod) => {
+                if self.config.wasmedge_process_enabled() {
+                    if self
+                        .host_registered_modules
+                        .contains_key(&HostRegistration::WasmEdgeProcess)
+                    {
+                        return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                    } else {
+                        self.host_registered_modules.insert(
+                            HostRegistration::WasmEdgeProcess,
+                            ImportObject::WasmEdgeProcess(import_mod),
+                        );
+                    }
+                    self.executor.register_import_object(
+                        &mut self.store,
+                        self.host_registered_modules
+                            .get(&HostRegistration::WasmEdgeProcess)
+                            .unwrap(),
+                    )
+                } else {
+                    if self.imports.contains_key(&io_name) {
+                        return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                    } else {
+                        self.imports
+                            .insert(io_name.clone(), ImportObject::WasmEdgeProcess(import_mod));
+                    }
+                    self.executor.register_import_object(
+                        &mut self.store,
+                        self.imports.get(&io_name).unwrap(),
+                    )
+                }
+            }
+            #[cfg(all(target_os = "linux", feature = "wasi_nn", target_arch = "x86_64"))]
+            ImportObject::Nn(import_mod) => unsafe {
+                if self.imports.contains_key(&io_name) {
+                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                } else {
+                    self.imports
+                        .insert(io_name.clone(), ImportObject::Import(import_mod));
+                }
+                self.executor
+                    .register_import_object(&mut self.store, self.imports.get(&io_name).unwrap())
+            },
+            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
+            ImportObject::Crypto(WasiCrypto::Common(import_mod)) => unsafe {
+                if self.imports.contains_key(&io_name) {
+                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                } else {
+                    self.imports.insert(
+                        io_name.clone(),
+                        ImportObject::Crypto(WasiCrypto::Common(import_mod)),
+                    );
+                }
+                self.executor
+                    .register_import_object(&mut self.store, self.imports.get(&io_name).unwrap())
+            },
+            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
+            ImportObject::Crypto(WasiCrypto::AsymmetricCommon(import_mod)) => unsafe {
+                if self.imports.contains_key(&io_name) {
+                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                } else {
+                    self.imports.insert(
+                        io_name.clone(),
+                        ImportObject::Crypto(WasiCrypto::AsymmetricCommon(import_mod)),
+                    );
+                }
+                self.executor
+                    .register_import_object(&mut self.store, self.imports.get(&io_name).unwrap())
+            },
+            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
+            ImportObject::Crypto(WasiCrypto::SymmetricOptionations(import_mod)) => unsafe {
+                if self.imports.contains_key(&io_name) {
+                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                } else {
+                    self.imports.insert(
+                        io_name.clone(),
+                        ImportObject::Crypto(WasiCrypto::SymmetricOptionations(import_mod)),
+                    );
+                }
+                self.executor
+                    .register_import_object(&mut self.store, self.imports.get(&io_name).unwrap())
+            },
+            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
+            ImportObject::Crypto(WasiCrypto::KeyExchange(import_mod)) => unsafe {
+                if self.imports.contains_key(&io_name) {
+                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                } else {
+                    self.imports.insert(
+                        io_name.clone(),
+                        ImportObject::Crypto(WasiCrypto::KeyExchange(import_mod)),
+                    );
+                }
+                self.executor
+                    .register_import_object(&mut self.store, self.imports.get(&io_name).unwrap())
+            },
+            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
+            ImportObject::Crypto(WasiCrypto::Signatures(import_mod)) => unsafe {
+                if self.imports.contains_key(&io_name) {
+                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
+                } else {
+                    self.imports.insert(
+                        io_name.clone(),
+                        ImportObject::Crypto(WasiCrypto::Signatures(import_mod)),
+                    );
+                }
+                self.executor
+                    .register_import_object(&mut self.store, self.imports.get(&io_name).unwrap())
+            },
+        }
+    }
+
+    /// Registers a given WasmEdge AST [Module](crate::Module) into the [Vm], and instantiates it. The module is consumed.
+    ///
+    /// The workflow of the function can be summarized as the following steps:
+    ///
+    /// - First, loads a WASM module from the given WasmEdge AST [Module](crate::Module), then
+    ///
+    /// - Registers all exported instances in the WASM module into the [Vm];
+    ///
+    /// - Finally, instantiates the exported instances.
+    ///
+    /// # Arguments
+    ///
+    /// * `mod_name` - The name of the WASM module to be registered.
+    ///
+    /// * `module` - The WasmEdge AST [Module](crate::Module) generated by [Loader](crate::Loader) or [Compiler](crate::Compiler).
+    ///
+    /// # Error
+    ///
+    /// If fail to register the WASM module, then an error is returned.
+    pub fn register_wasm_from_module(
+        &mut self,
+        mod_name: impl AsRef<str>,
+        module: &Module,
+    ) -> WasmEdgeResult<()> {
+        // validate module
+        self.validator.validate(&module)?;
+
+        // register module
+        let instance =
+            self.executor
+                .register_named_module(&mut self.store, &module, mod_name.as_ref())?;
+        match self.instances.contains_key(mod_name.as_ref()) {
+            true => {
+                return Err(Box::new(WasmEdgeError::Vm(
+                    VmError::DuplicateModuleInstance(mod_name.as_ref().to_string()),
+                )));
+            }
+            false => {
+                self.instances
+                    .insert(mod_name.as_ref().to_string(), instance);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Registers a WASM module from a given in-memory wasm bytes into the [Vm], and instantiates it.
+    ///
+    /// The workflow of the function can be summarized as the following steps:
+    ///
+    /// - First, loads a WASM module from the given in-memory wasm bytes, then
+    ///
+    /// - Registers all exported instances in the WASM module into the [Vm];
+    ///
+    /// - Finally, instantiates the exported instances.
+    ///
+    /// # Arguments
+    ///
+    /// * `mod_name` - The name of the WASM module to be registered.
+    ///
+    /// * `bytes` - The in-memory wasm bytes.
+    ///
+    /// # Error
+    ///
+    /// If fail to register the WASM module, then an error is returned.
+    pub fn register_wasm_from_bytes(
+        &mut self,
+        mod_name: impl AsRef<str>,
+        bytes: impl AsRef<[u8]>,
+    ) -> WasmEdgeResult<()> {
+        // load module from bytes
+        let ast_module = self.loader.from_bytes(bytes)?;
+
+        // register module
+        self.register_wasm_from_module(mod_name, &ast_module)
+    }
+
+    /// Registers and instantiates a WASM module from a wasm file into the [Vm].
+    ///
+    /// The workflow of the function can be summarized as the following steps:
+    ///
+    /// * First, loads a WASM module from a given path, then
+    ///
+    /// * Registers all exported instances in the WASM module into the [Vm];
+    ///
+    /// * Finally, instantiates the exported instances.
+    ///
+    ///
+    /// # Arguments
+    ///
+    /// * `mod_name` - The name for the WASM module to be registered.
+    ///
+    /// * `file` - A wasm file or an AOT wasm file.
+    ///
+    /// # Error
+    ///
+    /// If fail to register the target WASM, then an error is returned.
+    pub fn register_wasm_from_file(
+        &mut self,
+        mod_name: impl AsRef<str>,
+        file: impl AsRef<Path>,
+    ) -> WasmEdgeResult<()> {
+        match file.as_ref().extension() {
+            Some(extension) => match extension.to_str() {
+                Some("wasm") => self.register_from_wasm_or_aot_file(mod_name, file),
+                #[cfg(target_os = "macos")]
+                Some("dylib") => self.register_from_wasm_or_aot_file(mod_name, file),
+                #[cfg(target_os = "linux")]
+                Some("so") => self.register_from_wasm_or_aot_file(mod_name, file),
+                #[cfg(target_os = "windows")]
+                Some("dll") => self.register_from_wasm_or_aot_file(mod_name, file),
+                Some("wat") => {
+                    let bytes = wat::parse_file(file.as_ref())
+                        .map_err(|_| WasmEdgeError::Operation("Failed to parse wat file".into()))?;
+                    self.register_wasm_from_bytes(mod_name, &bytes)
+                }
+                _ => Err(Box::new(WasmEdgeError::Operation(
+                    "The source file's extension should be one of `wasm`, `wat`, `dylib` on macOS, `so` on Linux or `dll` on Windows.".into(),
+                ))),
+            },
+            None => self.register_from_wasm_or_aot_file(mod_name, file),
+        }
+    }
+
+    fn register_from_wasm_or_aot_file(
+        &mut self,
+        mod_name: impl AsRef<str>,
+        file: impl AsRef<Path>,
+    ) -> WasmEdgeResult<()> {
+        // load module from file
+        let ast_module = self.loader.from_file(file.as_ref())?;
+
+        // register module
+        self.register_wasm_from_module(mod_name, &ast_module)
+    }
+}
+impl Drop for NewVm {
+    fn drop(&mut self) {
+        // if Arc::strong_count(&self.inner) == 1 && !self.inner.0.is_null() {
+        //     unsafe { ffi::WasmEdge_VMDelete(self.inner.0) };
+        // }
+
+        // drop imports
+        self.imports.drain();
+
+        // drop host_registered_modules
+        self.host_registered_modules.drain();
+    }
+}
+impl Engine for NewVm {
+    fn run_func(
+        &self,
+        func: &Function,
+        params: impl IntoIterator<Item = WasmValue>,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        let raw_params = params.into_iter().map(|x| x.as_raw()).collect::<Vec<_>>();
+
+        // get the length of the function's returns
+        let func_ty = func.ty()?;
+        let returns_len = func_ty.returns_len();
+        let mut returns = Vec::with_capacity(returns_len as usize);
+
+        let executor = self.executor();
+        unsafe {
+            check(ffi::WasmEdge_ExecutorInvoke(
+                executor.inner.0,
+                func.inner.0 as *const _,
+                raw_params.as_ptr(),
+                raw_params.len() as u32,
+                returns.as_mut_ptr(),
+                returns_len,
+            ))?;
+            returns.set_len(returns_len as usize);
+        }
+
+        Ok(returns.into_iter().map(Into::into).collect::<Vec<_>>())
+    }
+
+    fn run_func_ref(
+        &self,
+        func_ref: &FuncRef,
+        params: impl IntoIterator<Item = WasmValue>,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        let raw_params = params.into_iter().map(|x| x.as_raw()).collect::<Vec<_>>();
+
+        // get the length of the function's returns
+        let func_ty = func_ref.ty()?;
+        let returns_len = func_ty.returns_len();
+        let mut returns = Vec::with_capacity(returns_len as usize);
+
+        let executor = self.executor();
+        unsafe {
+            check(ffi::WasmEdge_ExecutorInvoke(
+                executor.inner.0,
+                func_ref.inner.0 as *const _,
+                raw_params.as_ptr(),
+                raw_params.len() as u32,
+                returns.as_mut_ptr(),
+                returns_len,
+            ))?;
+            returns.set_len(returns_len as usize);
+        }
+
+        Ok(returns.into_iter().map(Into::into).collect::<Vec<_>>())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(feature = "custom_wasi")]
+    use crate::instance::custom_wasi_module::CustomWasiModule;
+    #[cfg(all(unix, not(feature = "custom_wasi")))]
+    use crate::instance::module::WasiModule;
+    // #[cfg(target_os = "linux")]
+    use crate::ImportModule;
+    use crate::{
+        error::{
+            CoreCommonError, CoreError, CoreExecutionError, CoreLoadError, InstanceError, VmError,
+            WasmEdgeError,
+        },
+        AsInstance, Config, Loader, Module, Store, WasmValue,
+    };
+    #[cfg(unix)]
+    use crate::{
+        error::{CoreInstantiationError, HostFuncError},
+        AsImport, CallingFrame, FuncType, Function, ImportObject,
+    };
+    use std::{
+        sync::{Arc, Mutex},
+        thread,
+    };
+    use wasmedge_types::{wat2wasm, ValType};
+
+    #[test]
+    fn test_vm_new_create() -> Result<(), Box<dyn std::error::Error>> {
+        // create a Config context
+        let mut config = Config::create()?;
+        config.bulk_memory_operations(true);
+        assert!(config.bulk_memory_operations_enabled());
+        assert!(!config.wasi_enabled());
+
+        // create a Vm context with the given Config and Store
+        let vm = NewVm::create(Some(config))?;
+
+        #[cfg(feature = "custom_wasi")]
+        let result = vm.custom_wasi_module();
+        #[cfg(not(feature = "custom_wasi"))]
+        let result = vm.wasi_module();
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "custom_wasi")]
+    fn test_vm_new_register_import_custom_wasi() -> Result<(), Box<dyn std::error::Error>> {
+        use std::mem::MaybeUninit;
+        use wasmedge_wasi_common::{Ciovec, CiovecArray};
+
+        let mut vm = NewVm::create(None)?;
+
+        // create a CustomWasiModule
+        let args = vec!["arg1", "arg2"];
+        let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
+        let import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+
+        vm.register_wasm_from_import(ImportObject::CustomWasi(import_custom_wasi))?;
+
+        let custom_wasi_module = vm.custom_wasi_module()?;
+
+        // run `args_sizes_get`
+        let fn_args_sizes_get = custom_wasi_module.get_func("args_sizes_get")?;
+        let result = vm.run_func(&fn_args_sizes_get, []);
+        assert!(result.is_ok());
+        let returns = result.unwrap();
+        assert_eq!((returns[0].to_i32(), returns[1].to_i32()), (2, 10));
+
+        // run `args_get`
+        let fn_args_get = custom_wasi_module.get_func("args_get")?;
+        let mut iovs: MaybeUninit<Vec<Ciovec>> = MaybeUninit::uninit();
+        let result = vm.run_func(&fn_args_get, [WasmValue::from_extern_ref(&mut iovs)]);
+        assert!(result.is_ok());
+        let iovs = unsafe { iovs.assume_init() };
+        // parse the arguments returned
+        let mut args_get = vec![];
+        for iov in iovs {
+            let buf = unsafe { std::slice::from_raw_parts(iov.buf, iov.buf_len) };
+            let s = std::str::from_utf8(buf).unwrap();
+            args_get.push(s);
+        }
+        assert_eq!(args_get, ["arg1", "arg2"]);
+
+        // run `environ_sizes_get`
+        let fn_environ_sizes_get = custom_wasi_module.get_func("environ_sizes_get")?;
+        let result = vm.run_func(&fn_environ_sizes_get, []);
+        assert!(result.is_ok());
+        let returns = result.unwrap();
+        assert_eq!((returns[0].to_i32(), returns[1].to_i32()), (3, 30));
+
+        // run `environ_get`
+        let mut iovs: MaybeUninit<Vec<Ciovec>> = MaybeUninit::uninit();
+        let fn_environ_get = custom_wasi_module.get_func("environ_get")?;
+        let result = vm.run_func(&fn_environ_get, [WasmValue::from_extern_ref(&mut iovs)]);
+        assert!(result.is_ok());
+        let iovs = unsafe { iovs.assume_init() };
+        // parse the environment variables returned
+        let mut envs_get = vec![];
+        for iov in iovs {
+            let buf = unsafe { std::slice::from_raw_parts(iov.buf, iov.buf_len) };
+            let s = std::str::from_utf8(buf).unwrap();
+            envs_get.push(s);
+        }
+        assert_eq!(envs_get, ["ENV1=VAL1", "ENV2=VAL2", "ENV3=VAL3"]);
+
+        // run `fd_write`
+        let fn_fd_write = custom_wasi_module.get_func("fd_write")?;
+        let s = "Hello, world!";
+        let iov = Ciovec {
+            buf: s.as_ptr(),
+            buf_len: s.as_bytes().len(),
+        };
+        let mut iovs: CiovecArray<'_> = &[iov];
+        let result = vm.run_func(
+            &fn_fd_write,
+            [
+                WasmValue::from_i32(4),
+                WasmValue::from_extern_ref(&mut iovs),
+            ],
+        );
+        assert!(result.is_ok());
+        let returns = result.unwrap();
+        assert_eq!(returns[0].to_i32(), 13);
+
+        // run `proc_exit`
+        let fn_proc_exit = custom_wasi_module.get_func("proc_exit")?;
+        let _ = vm.run_func(&fn_proc_exit, [WasmValue::from_i32(1)]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vm_new_register_wasm_from_bytes() -> Result<(), Box<dyn std::error::Error>> {
+        // create a Config context
+        let mut config = Config::create()?;
+        config.bulk_memory_operations(true);
+        assert!(config.bulk_memory_operations_enabled());
+
+        // create a Vm context with the given Config and Store
+        let mut vm = NewVm::create(Some(config))?;
+
+        // register a wasm module from a buffer
+        let wasm_bytes = wat2wasm(
+            br#"
+            (module
+                (export "fib" (func $fib))
+                (func $fib (param $n i32) (result i32)
+                 (if
+                  (i32.lt_s
+                   (get_local $n)
+                   (i32.const 2)
+                  )
+                  (return
+                   (i32.const 1)
+                  )
+                 )
+                 (return
+                  (i32.add
+                   (call $fib
+                    (i32.sub
+                     (get_local $n)
+                     (i32.const 2)
+                    )
+                   )
+                   (call $fib
+                    (i32.sub
+                     (get_local $n)
+                     (i32.const 1)
+                    )
+                   )
+                  )
+                 )
+                )
+               )
+    "#,
+        )?;
+        vm.register_wasm_from_bytes("reg-wasm-buffer", &wasm_bytes)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vm_new_register_wasm_from_import() -> Result<(), Box<dyn std::error::Error>> {
+        // create a Config context
+        let mut config = Config::create()?;
+        config.bulk_memory_operations(true);
+        assert!(config.bulk_memory_operations_enabled());
+        config.wasi(true);
+        assert!(config.wasi_enabled());
+
+        // create a Vm context with the given Config and Store
+        let mut vm = NewVm::create(Some(config))?;
+
+        // create import module
+        let mut import = ImportModule::create("extern")?;
+
+        // add host function
+        let func_ty = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32])?;
+        let host_func = Function::create(&func_ty, Box::new(real_add), 0)?;
+        import.add_func("add", host_func);
+
+        // register the import_obj module
+        vm.register_wasm_from_import(ImportObject::Import(import))?;
+
+        // get ImportObj module
+        #[cfg(not(feature = "custom_wasi"))]
+        assert!(vm.wasi_module().is_ok());
+        #[cfg(feature = "custom_wasi")]
+        assert!(vm.custom_wasi_module().is_ok());
+        #[cfg(target_os = "linux")]
+        {
+            let result = vm.wasmedge_process_module_mut();
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err(),
+                Box::new(WasmEdgeError::Vm(VmError::NotFoundWasmEdgeProcessModule))
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vm_new_register_wasm_from_file() -> Result<(), Box<dyn std::error::Error>> {
+        // create a Config context
+        let mut config = Config::create()?;
+        config.bulk_memory_operations(true);
+        assert!(config.bulk_memory_operations_enabled());
+
+        // create a Vm context with the given Config and Store
+        let mut vm = NewVm::create(Some(config))?;
+
+        // register a wasm module from a buffer
+        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
+            .join("bindings/rust/wasmedge-sys/examples/data/fibonacci.wat");
+        vm.register_wasm_from_file("reg-wasm-buffer", path)?;
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_vm_new_wasi_module() -> Result<(), Box<dyn std::error::Error>> {
+        {
+            // create a Config context
+            let mut config = Config::create()?;
+            config.bulk_memory_operations(true);
+            assert!(config.bulk_memory_operations_enabled());
+            config.wasi(true);
+            assert!(config.wasi_enabled());
+
+            // create a Vm context with the given Config and Store
+            let mut vm = NewVm::create(Some(config))?;
+
+            // get the default wasi module
+            #[cfg(not(feature = "custom_wasi"))]
+            let result = vm.wasi_module();
+            #[cfg(feature = "custom_wasi")]
+            let result = vm.custom_wasi_module();
+            assert!(result.is_ok());
+
+            // *** try to add another Wasi module, that causes error.
+
+            // create a Wasi module
+            #[cfg(not(feature = "custom_wasi"))]
+            let import_wasi = WasiModule::create(None, None, None)?;
+            #[cfg(feature = "custom_wasi")]
+            let import_wasi = CustomWasiModule::create(None, None, None)?;
+
+            #[cfg(not(feature = "custom_wasi"))]
+            let result = vm.register_wasm_from_import(ImportObject::Wasi(import_wasi));
+            #[cfg(feature = "custom_wasi")]
+            let result = vm.register_wasm_from_import(ImportObject::CustomWasi(import_wasi));
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err(),
+                Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule))
+            );
+
+            // get store from vm
+            let store = vm.store();
+            // check registered modules
+            assert_eq!(store.module_len(), 1);
+            let result = store.module_names();
+            assert!(result.is_some());
+            assert_eq!(result.unwrap(), ["wasi_snapshot_preview1"]);
+        }
+
+        {
+            // create a Config context, not enable wasi and wasmedge_process options.
+            let mut config = Config::create()?;
+            config.bulk_memory_operations(true);
+            assert!(config.bulk_memory_operations_enabled());
+
+            // create a Vm context with the given Config and Store
+            let mut vm = NewVm::create(Some(config))?;
+
+            // get the Wasi module
+            #[cfg(not(feature = "custom_wasi"))]
+            let result = vm.wasi_module();
+            #[cfg(feature = "custom_wasi")]
+            let result = vm.custom_wasi_module();
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err(),
+                Box::new(WasmEdgeError::Vm(VmError::NotFoundWasiModule))
+            );
+
+            // *** try to add a Wasi module.
+
+            // create a Wasi module
+            #[cfg(not(feature = "custom_wasi"))]
+            let mut import_wasi = WasiModule::create(None, None, None)?;
+            #[cfg(feature = "custom_wasi")]
+            let mut import_wasi = CustomWasiModule::create(None, None, None)?;
+
+            // add host function
+            let func_ty = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32])?;
+            let host_func = Function::create(&func_ty, Box::new(real_add), 0)?;
+            import_wasi.add_func("add", host_func);
+
+            #[cfg(not(feature = "custom_wasi"))]
+            let result = vm.register_wasm_from_import(ImportObject::Wasi(import_wasi));
+            #[cfg(feature = "custom_wasi")]
+            let result = vm.register_wasm_from_import(ImportObject::CustomWasi(import_wasi));
+            assert!(result.is_ok());
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(all(not(feature = "static"), target_os = "linux"))]
+    #[allow(clippy::assertions_on_result_states)]
+    fn test_vm_new_wasmedge_process_module() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::{utils, WasmEdgeProcessModule};
+
+        // load wasmedge_process plugins
+        utils::load_plugin_from_default_paths();
+
+        {
+            // create a Config context
+            let mut config = Config::create()?;
+            config.bulk_memory_operations(true);
+            assert!(config.bulk_memory_operations_enabled());
+            config.wasmedge_process(true);
+            assert!(config.wasmedge_process_enabled());
+
+            // create a Vm context with the given Config and Store
+            let mut vm = NewVm::create(Some(config))?;
+
+            // get the WasmEdgeProcess module
+            let result = vm.wasmedge_process_module();
+            assert!(result.is_ok());
+
+            // *** try to add another WasmEdgeProcess module, that causes error.
+
+            // create a WasmEdgeProcess module
+            let import_process = WasmEdgeProcessModule::create(None, false)?;
+            let result =
+                vm.register_wasm_from_import(ImportObject::WasmEdgeProcess(import_process));
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err(),
+                Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule))
+            );
+
+            // get store from vm
+            let store = vm.store();
+            // check registered modules
+            assert_eq!(store.module_len(), 1);
+            let result = store.module_names();
+            assert!(result.is_some());
+            assert_eq!(result.unwrap(), ["wasmedge_process"]);
+        }
+
+        {
+            // create a Config context, not enable wasi and wasmedge_process options.
+            let mut config = Config::create()?;
+            config.bulk_memory_operations(true);
+            assert!(config.bulk_memory_operations_enabled());
+
+            // create a Vm context with the given Config and Store
+            let mut vm = NewVm::create(Some(config))?;
+
+            // get the WasmEdgeProcess module
+            let result = vm.wasmedge_process_module();
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err(),
+                Box::new(WasmEdgeError::Vm(VmError::NotFoundWasmEdgeProcessModule,))
+            );
+
+            // *** try to add a WasmEdgeProcess module.
+
+            // create a WasmEdgeProcess module
+            let mut import_process = WasmEdgeProcessModule::create(None, false)?;
+
+            // add host function
+            let func_ty = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32])?;
+            let host_func = Function::create(&func_ty, Box::new(real_add), 0)?;
+            import_process.add_func("add", host_func);
+
+            let result =
+                vm.register_wasm_from_import(ImportObject::WasmEdgeProcess(import_process));
+            assert!(result.is_ok());
+        }
+
+        Ok(())
+    }
+
+    fn real_add(_: CallingFrame, inputs: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
+        if inputs.len() != 2 {
+            return Err(HostFuncError::User(1));
+        }
+
+        let a = if inputs[0].ty() == ValType::I32 {
+            inputs[0].to_i32()
+        } else {
+            return Err(HostFuncError::User(2));
+        };
+
+        let b = if inputs[1].ty() == ValType::I32 {
+            inputs[1].to_i32()
+        } else {
+            return Err(HostFuncError::User(3));
+        };
+
+        // simulate a long running operation
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        let c = a + b;
+
+        Ok(vec![WasmValue::from_i32(c)])
+    }
+}

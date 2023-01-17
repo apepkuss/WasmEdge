@@ -182,6 +182,7 @@ pub mod utils;
 pub mod validator;
 #[doc(hidden)]
 pub mod vm;
+pub mod vm_new;
 
 #[doc(inline)]
 pub use ast_module::{ExportType, ImportType, Module};
@@ -194,6 +195,9 @@ pub use config::Config;
 pub use executor::Executor;
 #[doc(inline)]
 pub use frame::CallingFrame;
+#[cfg(not(feature = "custom_wasi"))]
+#[doc(inline)]
+pub use instance::module::WasiModule;
 #[cfg(all(target_os = "linux", feature = "wasi_nn", target_arch = "x86_64"))]
 #[doc(inline)]
 pub use instance::module::WasiNnModule;
@@ -211,7 +215,7 @@ pub use instance::{
     function::{FuncRef, FuncType, Function},
     global::{Global, GlobalType},
     memory::{MemType, Memory},
-    module::{AsImport, AsInstance, ImportModule, ImportObject, Instance, WasiModule},
+    module::{AsImport, AsInstance, ImportModule, ImportObject, Instance},
     table::{Table, TableType},
 };
 #[doc(inline)]
@@ -226,7 +230,7 @@ pub use types::WasmValue;
 pub use validator::Validator;
 #[doc(inline)]
 pub use vm::Vm;
-use wasmedge_types::{error, HostRegistration, WasmEdgeResult};
+use wasmedge_types::{error, WasmEdgeResult};
 
 /// Type alias for a boxed native function. This type is used in thread-safe cases.
 pub type BoxedFn = Box<

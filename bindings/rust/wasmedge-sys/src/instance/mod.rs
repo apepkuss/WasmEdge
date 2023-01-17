@@ -1,5 +1,7 @@
 //! Defines WasmEdge instance structs, including Function, Global, Memory, and Table.
 
+#[cfg(feature = "custom_wasi")]
+pub mod custom_wasi_module;
 pub mod function;
 pub mod global;
 pub mod memory;

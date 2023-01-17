@@ -1,5 +1,7 @@
 //! Defines WasmEdge Vm struct.
 
+#[cfg(not(feature = "custom_wasi"))]
+use crate::instance::module::WasiModule;
 #[cfg(feature = "async")]
 use crate::r#async::FiberFuture;
 #[cfg(all(target_os = "linux", feature = "wasi_nn", target_arch = "x86_64"))]
@@ -12,7 +14,7 @@ use crate::{
     ffi,
     instance::{
         function::{FuncRef, FuncType, Function, InnerFuncType},
-        module::{CustomWasiModule, InnerInstance},
+        module::InnerInstance,
     },
     loader::{InnerLoader, Loader},
     statistics::{InnerStat, Statistics},
@@ -20,7 +22,7 @@ use crate::{
     types::WasmEdgeString,
     utils::{self, check},
     validator::{InnerValidator, Validator},
-    Config, Engine, ImportObject, Instance, Module, WasiModule, WasmEdgeResult, WasmValue,
+    Config, Engine, ImportObject, Instance, Module, WasmEdgeResult, WasmValue,
 };
 #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
 use crate::{
@@ -28,7 +30,6 @@ use crate::{
     WasiCryptoSignaturesModule, WasiCryptoSymmetricModule,
 };
 use std::{collections::HashMap, path::Path, sync::Arc};
-use wasmedge_types::HostRegistration;
 
 /// A [Vm] defines a virtual environment for managing WebAssembly programs.
 pub struct Vm {
@@ -181,12 +182,14 @@ impl Vm {
                     import.inner.0 as *const _,
                 ))?;
             },
+            #[cfg(not(feature = "custom_wasi"))]
             ImportObject::Wasi(import) => unsafe {
                 check(ffi::WasmEdge_VMRegisterModuleFromImport(
                     self.inner.0,
                     import.inner.0 as *const _,
                 ))?;
             },
+            #[cfg(feature = "custom_wasi")]
             ImportObject::CustomWasi(import) => unsafe {
                 check(ffi::WasmEdge_VMRegisterModuleFromImport(
                     self.inner.0,
@@ -877,6 +880,7 @@ impl Vm {
     /// Returns the mutable [Wasi module instance](crate::WasiModule).
     ///
     /// Notice that this function is only available when a [config](crate::Config) with the enabled [wasi](crate::Config::wasi) option is used in the creation of this [Vm].
+    #[cfg(not(feature = "custom_wasi"))]
     pub fn wasi_module_mut(&mut self) -> WasmEdgeResult<WasiModule> {
         let io_ctx = unsafe {
             ffi::WasmEdge_VMGetImportModuleContext(
@@ -1193,385 +1197,11 @@ pub(crate) struct InnerVm(pub(crate) *mut ffi::WasmEdge_VMContext);
 unsafe impl Send for InnerVm {}
 unsafe impl Sync for InnerVm {}
 
-pub struct NewVm {
-    pub(crate) inner: Arc<InnerVm>,
-    imports: HashMap<String, ImportObject>,
-    host_registered_modules: HashMap<HostRegistration, ImportObject>,
-}
-impl NewVm {
-    /// Creates a new [Vm] to be associated with the given [configuration](crate::Config) and [store](crate::Store).
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - A configuration for the new [Vm].
-    ///
-    /// * `store` - An external WASM [store](crate::Store) used by the new [Vm]. The instantiation and execution of the new [Vm] will consume this store context. If no store context is specified when creating a [Vm], then the [Vm] itself will allocate and own a [store](crate::Store).
-    ///
-    /// # Error
-    ///
-    /// If fail to create, then an error is returned.
-    pub fn create(config: Option<Config>, store: Option<&mut Store>) -> WasmEdgeResult<Self> {
-        let ctx = match config {
-            Some(mut config) => {
-                let vm_ctx = match store {
-                    Some(store) => unsafe { ffi::WasmEdge_VMCreate(config.inner.0, store.inner.0) },
-                    None => unsafe { ffi::WasmEdge_VMCreate(config.inner.0, std::ptr::null_mut()) },
-                };
-
-                let inner_config = &mut *std::sync::Arc::get_mut(&mut config.inner).unwrap();
-                inner_config.0 = std::ptr::null_mut();
-
-                vm_ctx
-            }
-            None => match store {
-                Some(store) => unsafe {
-                    ffi::WasmEdge_VMCreate(std::ptr::null_mut(), store.inner.0)
-                },
-                None => unsafe {
-                    ffi::WasmEdge_VMCreate(std::ptr::null_mut(), std::ptr::null_mut())
-                },
-            },
-        };
-
-        match ctx.is_null() {
-            true => Err(Box::new(WasmEdgeError::Vm(VmError::Create))),
-            false => Ok(Self {
-                inner: Arc::new(InnerVm(ctx)),
-                imports: HashMap::new(),
-                host_registered_modules: HashMap::new(),
-            }),
-        }
-    }
-
-    /// Registers a given WasmEdge module instance that implements the [ImportObject](crate::ImportObject) trait into the [Vm], and instantiates it.
-    ///
-    /// The workflow of the function can be summarized as the following steps:
-    ///
-    /// * First, registers the exported module instance into the [Vm], then
-    ///
-    /// * Instatiates the exported instances.
-    ///
-    ///
-    /// # Argument
-    ///
-    /// * `import` - The module instance to be registered.
-    ///
-    /// # Error
-    ///
-    /// If fail to register the WASM module, then an error is returned.
-    pub fn register_wasm_from_import(&mut self, import: ImportObject) -> WasmEdgeResult<()> {
-        let io_name: String = import.name().into();
-
-        let import_obj = match import {
-            ImportObject::Import(import_mod) => {
-                if self.imports.contains_key(&io_name) {
-                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
-                } else {
-                    self.imports
-                        .insert(io_name.clone(), ImportObject::Import(import_mod));
-                }
-                self.imports.get(&io_name).unwrap()
-            }
-            ImportObject::Wasi(import_mod) => {
-                if self
-                    .host_registered_modules
-                    .contains_key(&HostRegistration::Wasi)
-                {
-                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
-                } else {
-                    self.host_registered_modules
-                        .insert(HostRegistration::Wasi, ImportObject::Wasi(import_mod));
-                }
-                self.host_registered_modules
-                    .get(&HostRegistration::Wasi)
-                    .unwrap()
-            }
-            ImportObject::CustomWasi(import_mod) => {
-                if self
-                    .host_registered_modules
-                    .contains_key(&HostRegistration::Wasi)
-                {
-                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
-                } else {
-                    self.host_registered_modules
-                        .insert(HostRegistration::Wasi, ImportObject::CustomWasi(import_mod));
-                }
-                self.host_registered_modules
-                    .get(&HostRegistration::Wasi)
-                    .unwrap()
-            }
-            ImportObject::WasmEdgeProcess(import_mod) => {
-                if self
-                    .host_registered_modules
-                    .contains_key(&HostRegistration::WasmEdgeProcess)
-                {
-                    return Err(Box::new(WasmEdgeError::Vm(VmError::DuplicateImportModule)));
-                } else {
-                    self.host_registered_modules.insert(
-                        HostRegistration::WasmEdgeProcess,
-                        ImportObject::WasmEdgeProcess(import_mod),
-                    );
-                }
-                self.host_registered_modules
-                    .get(&HostRegistration::WasmEdgeProcess)
-                    .unwrap()
-            }
-            _ => panic!("error"),
-        };
-
-        match import_obj {
-            ImportObject::Import(import_mod) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import_mod.inner.0 as *const _,
-                ))?;
-            },
-            ImportObject::Wasi(import_mod) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import_mod.inner.0 as *const _,
-                ))?;
-            },
-            ImportObject::CustomWasi(import_mod) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import_mod.inner.0 as *const _,
-                ))?;
-            },
-            #[cfg(target_os = "linux")]
-            ImportObject::WasmEdgeProcess(import) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import.inner.0 as *const _,
-                ))?;
-            },
-            #[cfg(all(target_os = "linux", feature = "wasi_nn", target_arch = "x86_64"))]
-            ImportObject::Nn(import) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import.inner.0 as *const _,
-                ))?;
-            },
-            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
-            ImportObject::Crypto(WasiCrypto::Common(import)) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import.inner.0 as *const _,
-                ))?;
-            },
-            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
-            ImportObject::Crypto(WasiCrypto::AsymmetricCommon(import)) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import.inner.0 as *const _,
-                ))?;
-            },
-            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
-            ImportObject::Crypto(WasiCrypto::SymmetricOptionations(import)) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import.inner.0 as *const _,
-                ))?;
-            },
-            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
-            ImportObject::Crypto(WasiCrypto::KeyExchange(import)) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import.inner.0 as *const _,
-                ))?;
-            },
-            #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
-            ImportObject::Crypto(WasiCrypto::Signatures(import)) => unsafe {
-                check(ffi::WasmEdge_VMRegisterModuleFromImport(
-                    self.inner.0,
-                    import.inner.0 as *const _,
-                ))?;
-            },
-        };
-
-        Ok(())
-    }
-
-    pub fn custom_wasi_module(&self) -> WasmEdgeResult<&CustomWasiModule> {
-        let import = self
-            .host_registered_modules
-            .get(&HostRegistration::Wasi)
-            .unwrap();
-        match import {
-            ImportObject::CustomWasi(wasi_module) => Ok(wasi_module),
-            _ => panic!("error"),
-        }
-    }
-
-    pub fn custom_wasi_module_mut(&mut self) -> WasmEdgeResult<&mut CustomWasiModule> {
-        let import = self
-            .host_registered_modules
-            .get_mut(&HostRegistration::Wasi)
-            .unwrap();
-        match import {
-            ImportObject::CustomWasi(wasi_module) => Ok(wasi_module),
-            _ => panic!("error"),
-        }
-    }
-
-    pub fn wasi_module(&self) -> WasmEdgeResult<&WasiModule> {
-        let import = self
-            .host_registered_modules
-            .get(&HostRegistration::Wasi)
-            .unwrap();
-        match import {
-            ImportObject::Wasi(wasi_module) => Ok(wasi_module),
-            _ => panic!("error"),
-        }
-    }
-
-    pub fn wasi_module_mut(&mut self) -> WasmEdgeResult<&mut WasiModule> {
-        let import = self
-            .host_registered_modules
-            .get_mut(&HostRegistration::Wasi)
-            .unwrap();
-        match import {
-            ImportObject::Wasi(wasi_module) => Ok(wasi_module),
-            _ => panic!("error"),
-        }
-    }
-
-    pub fn wasmedge_process_module(&self) -> WasmEdgeResult<&WasmEdgeProcessModule> {
-        let import = self
-            .host_registered_modules
-            .get(&HostRegistration::WasmEdgeProcess)
-            .unwrap();
-        match import {
-            ImportObject::WasmEdgeProcess(wasmedge_process_module) => Ok(wasmedge_process_module),
-            _ => panic!("error"),
-        }
-    }
-
-    /// Returns the mutable [WasmEdgeProcess module instance](crate::WasmEdgeProcessModule).
-    ///
-    /// Notice that this function is only available when a [config](crate::Config) with the enabled [wasmedge_process](crate::Config::wasmedge_process) option is used in the creation of this [Vm].
-    #[cfg(target_os = "linux")]
-    pub fn wasmedge_process_module_mut(&mut self) -> WasmEdgeResult<&mut WasmEdgeProcessModule> {
-        let import = self
-            .host_registered_modules
-            .get_mut(&HostRegistration::WasmEdgeProcess)
-            .unwrap();
-        match import {
-            ImportObject::WasmEdgeProcess(wasmedge_process_module) => Ok(wasmedge_process_module),
-            _ => panic!("error"),
-        }
-    }
-
-    /// Returns the internal [Loader](crate::Loader) from the [Vm].
-    pub fn loader(&self) -> WasmEdgeResult<Loader> {
-        let loader_ctx = unsafe { ffi::WasmEdge_VMGetLoaderContext(self.inner.0) };
-        match loader_ctx.is_null() {
-            true => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundLoader))),
-            false => Ok(Loader {
-                inner: InnerLoader(loader_ctx),
-                registered: true,
-            }),
-        }
-    }
-
-    /// Returns the internal [Validator](crate::Validator) from the [Vm].
-    pub fn validator(&self) -> WasmEdgeResult<Validator> {
-        let validator_ctx = unsafe { ffi::WasmEdge_VMGetValidatorContext(self.inner.0) };
-        match validator_ctx.is_null() {
-            true => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundValidator))),
-            false => Ok(Validator {
-                inner: InnerValidator(validator_ctx),
-                registered: true,
-            }),
-        }
-    }
-
-    /// Returns the internal [Executor](crate::Executor) from the [Vm].
-    pub fn executor(&self) -> WasmEdgeResult<Executor> {
-        let executor_ctx = unsafe { ffi::WasmEdge_VMGetExecutorContext(self.inner.0) };
-        match executor_ctx.is_null() {
-            true => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundExecutor))),
-            false => Ok(Executor {
-                inner: InnerExecutor(executor_ctx),
-                registered: true,
-            }),
-        }
-    }
-}
-impl Drop for NewVm {
-    fn drop(&mut self) {
-        if Arc::strong_count(&self.inner) == 1 && !self.inner.0.is_null() {
-            unsafe { ffi::WasmEdge_VMDelete(self.inner.0) };
-        }
-
-        // drop imports
-        self.imports.drain();
-
-        // drop host_registered_modules
-        self.host_registered_modules.drain();
-    }
-}
-impl Engine for NewVm {
-    fn run_func(
-        &self,
-        func: &Function,
-        params: impl IntoIterator<Item = WasmValue>,
-    ) -> WasmEdgeResult<Vec<WasmValue>> {
-        let raw_params = params.into_iter().map(|x| x.as_raw()).collect::<Vec<_>>();
-
-        // get the length of the function's returns
-        let func_ty = func.ty()?;
-        let returns_len = func_ty.returns_len();
-        let mut returns = Vec::with_capacity(returns_len as usize);
-
-        let executor = self.executor()?;
-        unsafe {
-            check(ffi::WasmEdge_ExecutorInvoke(
-                executor.inner.0,
-                func.inner.0 as *const _,
-                raw_params.as_ptr(),
-                raw_params.len() as u32,
-                returns.as_mut_ptr(),
-                returns_len,
-            ))?;
-            returns.set_len(returns_len as usize);
-        }
-
-        Ok(returns.into_iter().map(Into::into).collect::<Vec<_>>())
-    }
-
-    fn run_func_ref(
-        &self,
-        func_ref: &FuncRef,
-        params: impl IntoIterator<Item = WasmValue>,
-    ) -> WasmEdgeResult<Vec<WasmValue>> {
-        let raw_params = params.into_iter().map(|x| x.as_raw()).collect::<Vec<_>>();
-
-        // get the length of the function's returns
-        let func_ty = func_ref.ty()?;
-        let returns_len = func_ty.returns_len();
-        let mut returns = Vec::with_capacity(returns_len as usize);
-
-        let executor = self.executor()?;
-        unsafe {
-            check(ffi::WasmEdge_ExecutorInvoke(
-                executor.inner.0,
-                func_ref.inner.0 as *const _,
-                raw_params.as_ptr(),
-                raw_params.len() as u32,
-                returns.as_mut_ptr(),
-                returns_len,
-            ))?;
-            returns.set_len(returns_len as usize);
-        }
-
-        Ok(returns.into_iter().map(Into::into).collect::<Vec<_>>())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(all(unix, not(feature = "custom_wasi")))]
+    use crate::instance::module::WasiModule;
     #[cfg(target_os = "linux")]
     use crate::ImportModule;
     use crate::{
@@ -1584,100 +1214,13 @@ mod tests {
     #[cfg(unix)]
     use crate::{
         error::{CoreInstantiationError, HostFuncError},
-        instance::module::CustomWasiModule,
-        AsImport, CallingFrame, FuncType, Function, ImportObject, WasiModule,
+        AsImport, CallingFrame, FuncType, Function, ImportObject,
     };
     use std::{
         sync::{Arc, Mutex},
         thread,
     };
     use wasmedge_types::{wat2wasm, ValType};
-
-    #[test]
-    fn test_vm_register_import_custom_wasi() -> Result<(), Box<dyn std::error::Error>> {
-        use std::mem::MaybeUninit;
-        use wasmedge_wasi_common::{Ciovec, CiovecArray};
-
-        let mut vm = NewVm::create(None, None)?;
-
-        // create a CustomWasiModule
-        let args = vec!["arg1", "arg2"];
-        let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
-        let import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
-
-        vm.register_wasm_from_import(ImportObject::CustomWasi(import_custom_wasi))?;
-
-        let custom_wasi_module = vm.custom_wasi_module()?;
-
-        // run `args_sizes_get`
-        let fn_args_sizes_get = custom_wasi_module.get_func("args_sizes_get")?;
-        let result = vm.run_func(&fn_args_sizes_get, []);
-        assert!(result.is_ok());
-        let returns = result.unwrap();
-        assert_eq!((returns[0].to_i32(), returns[1].to_i32()), (2, 10));
-
-        // run `args_get`
-        let mut iovs: MaybeUninit<Vec<Ciovec>> = MaybeUninit::uninit();
-        let fn_args_get = custom_wasi_module.get_func("args_get")?;
-        let result = vm.run_func(&fn_args_get, [WasmValue::from_extern_ref(&mut iovs)]);
-        assert!(result.is_ok());
-        let iovs = unsafe { iovs.assume_init() };
-        // parse the arguments returned
-        let mut args_get = vec![];
-        for iov in iovs {
-            let buf = unsafe { std::slice::from_raw_parts(iov.buf, iov.buf_len) };
-            let s = std::str::from_utf8(buf).unwrap();
-            args_get.push(s);
-        }
-        assert_eq!(args_get, ["arg1", "arg2"]);
-
-        // run `environ_sizes_get`
-        let fn_environ_sizes_get = custom_wasi_module.get_func("environ_sizes_get")?;
-        let result = vm.run_func(&fn_environ_sizes_get, []);
-        assert!(result.is_ok());
-        let returns = result.unwrap();
-        assert_eq!((returns[0].to_i32(), returns[1].to_i32()), (3, 30));
-
-        // run `environ_get`
-        let mut iovs: MaybeUninit<Vec<Ciovec>> = MaybeUninit::uninit();
-        let fn_environ_get = custom_wasi_module.get_func("environ_get")?;
-        let result = vm.run_func(&fn_environ_get, [WasmValue::from_extern_ref(&mut iovs)]);
-        assert!(result.is_ok());
-        let iovs = unsafe { iovs.assume_init() };
-        // parse the environment variables returned
-        let mut envs_get = vec![];
-        for iov in iovs {
-            let buf = unsafe { std::slice::from_raw_parts(iov.buf, iov.buf_len) };
-            let s = std::str::from_utf8(buf).unwrap();
-            envs_get.push(s);
-        }
-        assert_eq!(envs_get, ["ENV1=VAL1", "ENV2=VAL2", "ENV3=VAL3"]);
-
-        // run `fd_write`
-        let fn_fd_write = custom_wasi_module.get_func("fd_write")?;
-        let s = "Hello, world!";
-        let iov = Ciovec {
-            buf: s.as_ptr(),
-            buf_len: s.as_bytes().len(),
-        };
-        let mut iovs: CiovecArray<'_> = &[iov];
-        let result = vm.run_func(
-            &fn_fd_write,
-            [
-                WasmValue::from_i32(4),
-                WasmValue::from_extern_ref(&mut iovs),
-            ],
-        );
-        assert!(result.is_ok());
-        let returns = result.unwrap();
-        assert_eq!(returns[0].to_i32(), 13);
-
-        // run `proc_exit`
-        let fn_proc_exit = custom_wasi_module.get_func("proc_exit")?;
-        let _ = vm.run_func(&fn_proc_exit, [WasmValue::from_i32(1)]);
-
-        Ok(())
-    }
 
     #[test]
     #[allow(clippy::assertions_on_result_states)]
@@ -1798,526 +1341,6 @@ mod tests {
                 CoreLoadError::IllegalPath
             )))
         );
-    }
-
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_vm_load_wasm_from_buffer() {
-        // create Config instance
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-
-        // create Store instance
-        let result = Store::create();
-        assert!(result.is_ok(), "Failed to create Store instance");
-        let mut store = result.unwrap();
-
-        // create Vm instance
-        let result = Vm::create(Some(config), Some(&mut store));
-        assert!(result.is_ok());
-        let vm = result.unwrap();
-
-        // load wasm module from buffer
-        let result = wat2wasm(
-            br#"
-            (module
-                (export "fib" (func $fib))
-                (func $fib (param $n i32) (result i32)
-                 (if
-                  (i32.lt_s
-                   (get_local $n)
-                   (i32.const 2)
-                  )
-                  (return
-                   (i32.const 1)
-                  )
-                 )
-                 (return
-                  (i32.add
-                   (call $fib
-                    (i32.sub
-                     (get_local $n)
-                     (i32.const 2)
-                    )
-                   )
-                   (call $fib
-                    (i32.sub
-                     (get_local $n)
-                     (i32.const 1)
-                    )
-                   )
-                  )
-                 )
-                )
-               )
-    "#,
-        );
-        assert!(result.is_ok());
-        let wasm_bytes = result.unwrap();
-
-        let result = vm.load_wasm_from_bytes(&wasm_bytes);
-        assert!(result.is_ok());
-
-        // load wasm module from an empty buffer
-        let empty_buffer: Vec<u8> = vec![];
-        let result = vm.load_wasm_from_bytes(&empty_buffer);
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Load(
-                CoreLoadError::UnexpectedEnd
-            )))
-        );
-    }
-
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_vm_load_wasm_from_module() {
-        // create a Config context
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-
-        // create a Store context
-        let result = Store::create();
-        assert!(result.is_ok(), "Failed to create Store instance");
-        let mut store = result.unwrap();
-
-        // create a Vm context with the given Config and Store
-        let result = Vm::create(Some(config), Some(&mut store));
-        assert!(result.is_ok());
-        let vm = result.unwrap();
-
-        // create a loader
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.wasi(true);
-        assert!(config.wasi_enabled());
-        let result = Loader::create(Some(config));
-        assert!(result.is_ok());
-        let loader = result.unwrap();
-
-        // load a AST module from a file
-        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sys/examples/data/fibonacci.wat");
-        let result = loader.from_file(path);
-        assert!(result.is_ok());
-        let module = result.unwrap();
-
-        // load wasm module from an ast module
-        let result = vm.load_wasm_from_module(&module);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_vm_validate() {
-        let result = Vm::create(None, None);
-        assert!(result.is_ok());
-        let vm = result.unwrap();
-
-        let result = vm.validate();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Common(
-                CoreCommonError::WrongVMWorkflow
-            )))
-        );
-
-        // create a loader
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.wasi(true);
-        assert!(config.wasi_enabled());
-        let result = Loader::create(Some(config));
-        assert!(result.is_ok());
-        let loader = result.unwrap();
-
-        // load a AST module from a file
-        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sys/examples/data/fibonacci.wat");
-        let result = loader.from_file(path);
-        assert!(result.is_ok());
-        let module = result.unwrap();
-
-        // load a wasm module from a ast module
-        let result = vm.load_wasm_from_module(&module);
-        assert!(result.is_ok());
-
-        let result = vm.validate();
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_vm_instantiate() {
-        let result = Vm::create(None, None);
-        assert!(result.is_ok());
-        let vm = result.unwrap();
-
-        let result = vm.instantiate();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Common(
-                CoreCommonError::WrongVMWorkflow
-            )))
-        );
-
-        // create a loader
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.wasi(true);
-        assert!(config.wasi_enabled());
-        let result = Loader::create(Some(config));
-        assert!(result.is_ok());
-        let loader = result.unwrap();
-
-        // load a AST module from a file
-        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sys/examples/data/fibonacci.wat");
-        let result = loader.from_file(path);
-        assert!(result.is_ok());
-        let module = result.unwrap();
-
-        let result = vm.load_wasm_from_module(&module);
-        assert!(result.is_ok());
-
-        // call instantiate before validate
-        let result = vm.instantiate();
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Common(
-                CoreCommonError::WrongVMWorkflow
-            )))
-        );
-
-        // call validate, then instantiate
-        let result = vm.validate();
-        assert!(result.is_ok());
-        let result = vm.instantiate();
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_vm_invoke_wasm_function_step_by_step() {
-        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sys/examples/data/fibonacci.wat");
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-
-        // load module from file
-        let result = Loader::create(Some(config));
-        assert!(result.is_ok());
-        let loader = result.unwrap();
-        let result = loader.from_file(path);
-        assert!(result.is_ok());
-        let ast_module = result.unwrap();
-
-        // create Vm instance
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-
-        let result = Store::create();
-        assert!(result.is_ok());
-        let mut store = result.unwrap();
-
-        let result = Vm::create(Some(config), Some(&mut store));
-        assert!(result.is_ok());
-        let vm = result.unwrap();
-
-        // load wasm module from a ast module instance
-        let result = vm.load_wasm_from_module(&ast_module);
-        assert!(result.is_ok());
-
-        // validate vm instance
-        let result = vm.validate();
-        assert!(result.is_ok());
-
-        // instantiate
-        let result = vm.instantiate();
-        assert!(result.is_ok());
-
-        // run function
-        let result = vm.run_function("fib", [WasmValue::from_i32(5)]);
-        assert!(result.is_ok());
-        let values = result.unwrap();
-        assert_eq!(values[0].to_i32(), 8);
-
-        // run function with empty parameter
-        let result = vm.run_function("fib", []);
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // run a function with the parameters of wrong type
-        let result = vm.run_function("fib", [WasmValue::from_i64(5)]);
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // run a function: the specified function name is non-existent
-        let result = vm.run_function("fib2", [WasmValue::from_i32(5)]);
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Instance(InstanceError::NotFoundFunc(
-                "fib2".into()
-            )))
-        );
-
-        // check function types
-        let result = vm.get_function_type("fib");
-        assert!(result.is_ok());
-        let func_ty = result.unwrap();
-        assert_eq!(func_ty.params_len(), 1);
-        assert_eq!(
-            func_ty.params_type_iter().collect::<Vec<_>>(),
-            vec![ValType::I32]
-        );
-        assert_eq!(func_ty.returns_len(), 1);
-        assert_eq!(
-            func_ty.returns_type_iter().collect::<Vec<_>>(),
-            vec![ValType::I32]
-        );
-
-        // check functions
-        let functions = vm.function_iter().collect::<Vec<_>>();
-        assert_eq!(functions.len(), 1);
-        let pair = &functions[0];
-        let func_name = pair.0.as_ref();
-        assert!(func_name.is_some());
-        assert_eq!(func_name.unwrap(), "fib");
-        let func_ty = pair.1.as_ref();
-        assert!(func_ty.is_some());
-    }
-
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_vm_register_wasm_from_file() {
-        // create a Config context
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-
-        // create a Store context
-        let result = Store::create();
-        assert!(result.is_ok(), "Failed to create Store instance");
-        let mut store = result.unwrap();
-
-        // create a Vm context with the given Config and Store
-        let result = Vm::create(Some(config), Some(&mut store));
-        assert!(result.is_ok());
-        let vm = result.unwrap();
-
-        // register a wasm module from a non-existed file
-        let result = vm.register_wasm_from_file("reg-wasm-file", "no_file.wasm");
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Load(
-                CoreLoadError::IllegalPath
-            )))
-        );
-
-        // register a wasm module from a wasm file
-        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sys/examples/data/fibonacci.wat");
-        let result = vm.register_wasm_from_file("reg-wasm-file", path);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_vm_register_wasm_from_module() {
-        // create a Config context
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-
-        // create a Store context
-        let result = Store::create();
-        assert!(result.is_ok(), "Failed to create Store instance");
-        let mut store = result.unwrap();
-
-        // create a Vm context with the given Config and Store
-        let result = Vm::create(Some(config), Some(&mut store));
-        assert!(result.is_ok());
-        let vm = result.unwrap();
-
-        // create a loader
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.wasi(true);
-        assert!(config.wasi_enabled());
-        let result = Loader::create(Some(config));
-        assert!(result.is_ok());
-        let loader = result.unwrap();
-
-        // load a AST module from a file
-        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sys/examples/data/fibonacci.wat");
-        let result = loader.from_file(path);
-        assert!(result.is_ok());
-        let module = result.unwrap();
-
-        // register a wasm module from an AST module
-        let mod_name = "reg-wasm-ast";
-        let result = vm.register_wasm_from_module(mod_name, module);
-        assert!(result.is_ok());
-
-        // run a registered function
-        let result = vm.run_registered_function(mod_name, "fib", [WasmValue::from_i32(5)]);
-        assert!(result.is_ok());
-        let returns = result.unwrap();
-        assert_eq!(returns[0].to_i32(), 8);
-
-        // get the registered function type
-        let result = vm.get_registered_function_type(mod_name, "fib");
-        assert!(result.is_ok());
-        let func_ty = result.unwrap();
-        assert_eq!(func_ty.params_len(), 1);
-        assert_eq!(
-            func_ty.params_type_iter().collect::<Vec<_>>(),
-            vec![ValType::I32]
-        );
-        assert_eq!(func_ty.returns_len(), 1);
-        assert_eq!(
-            func_ty.returns_type_iter().collect::<Vec<_>>(),
-            vec![ValType::I32]
-        );
-
-        // get the registered function type by a wrong module name
-        let result = vm.get_registered_function_type("non-existent-module", "fib");
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Vm(VmError::NotFoundModule(
-                "non-existent-module".into()
-            )))
-        );
-
-        // run a registered function with empty parameters
-        let empty_params: Vec<WasmValue> = vec![];
-        let result = vm.run_registered_function(mod_name, "fib", empty_params);
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // run a registered function with the parameters of wrong type
-        let result = vm.run_registered_function(mod_name, "fib", [WasmValue::from_i64(5)]);
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Core(CoreError::Execution(
-                CoreExecutionError::FuncTypeMismatch
-            )))
-        );
-
-        // run a registered function but give a wrong function name.
-        let result = vm.run_registered_function(mod_name, "fib2", [WasmValue::from_i32(5)]);
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Instance(InstanceError::NotFoundFunc(
-                "fib2".into()
-            )))
-        );
-    }
-
-    #[test]
-    #[cfg(target_os = "linux")]
-    #[allow(clippy::assertions_on_result_states)]
-    fn test_vm_register_wasm_from_import() {
-        // create a Config context
-        let result = Config::create();
-        assert!(result.is_ok());
-        let mut config = result.unwrap();
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-        config.wasi(true);
-        assert!(config.wasi_enabled());
-
-        // create a Store context
-        let result = Store::create();
-        assert!(result.is_ok(), "Failed to create Store instance");
-        let mut store = result.unwrap();
-
-        // create a Vm context with the given Config and Store
-        let result = Vm::create(Some(config), Some(&mut store));
-        assert!(result.is_ok());
-        let mut vm = result.unwrap();
-
-        // create import module
-        let result = ImportModule::create("extern");
-        assert!(result.is_ok());
-        let mut import = result.unwrap();
-
-        // add host function
-        let result = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32]);
-        assert!(result.is_ok());
-        let func_ty = result.unwrap();
-        let result = Function::create(&func_ty, Box::new(real_add), 0);
-        assert!(result.is_ok());
-        let host_func = result.unwrap();
-        import.add_func("add", host_func);
-
-        // register the import_obj module
-        let result = vm.register_wasm_from_import(ImportObject::Import(import));
-        assert!(result.is_ok());
-
-        vm.reset();
-
-        // get ImportObj module
-        let result = vm.wasi_module_mut();
-        assert!(result.is_ok());
-        let result = vm.wasmedge_process_module_mut();
-        assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            Box::new(WasmEdgeError::Vm(VmError::NotFoundWasmEdgeProcessModule))
-        );
-
-        // get store
-        let result = vm.store_mut();
-        assert!(result.is_ok());
-
-        // get statistics
-        let result = vm.statistics_mut();
-        assert!(result.is_ok());
     }
 
     #[test]
@@ -2928,7 +1951,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(all(unix, not(feature = "custom_wasi")))]
     #[allow(clippy::assertions_on_result_states)]
     fn test_vm_get_wasi_module() {
         {
@@ -3019,6 +2042,7 @@ mod tests {
             assert!(result.is_ok());
 
             // get the Wasi module
+
             let result = vm.wasi_module_mut();
             assert!(result.is_err());
             assert_eq!(
@@ -3305,7 +2329,10 @@ mod tests {
         result.unwrap()
     }
 
-    #[cfg(unix)]
+    #[cfg(any(
+        all(unix, not(feature = "custom_wasi")),
+        all(not(feature = "static"), target_os = "linux")
+    ))]
     fn real_add(_: CallingFrame, inputs: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
         if inputs.len() != 2 {
             return Err(HostFuncError::User(1));
