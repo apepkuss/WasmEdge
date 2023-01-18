@@ -90,45 +90,48 @@ impl CustomWasiModule {
             name: name.to_string(),
         };
 
-        // add wasi host
-        // `proc_exit`
-        let ty = FuncType::create(vec![ValType::I32], vec![])?;
-        // let data =
-        //     (&mut custom_wasi_module.environ) as *mut WasiEnviron as *mut std::os::raw::c_void;
-        // let data = std::ptr::null_mut();
-        custom_wasi_module.add_func(
-            "proc_exit",
-            Function::create(&ty, Box::new(wasi_proc_exit), 0)?,
-        );
-        // `fd_write`
-        let ty = FuncType::create(vec![ValType::I32, ValType::ExternRef], vec![ValType::I32])?;
-        custom_wasi_module.add_func(
-            "fd_write",
-            Function::create(&ty, Box::new(wasi_fd_write), 0)?,
-        );
+        // * add wasi host functions
+
         // `args_sizes_get`
-        let ty = FuncType::create(vec![], vec![ValType::I32, ValType::I32])?;
+        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
         custom_wasi_module.add_func(
             "args_sizes_get",
             Function::create(&ty, Box::new(wasi_args_sizes_get), 0)?,
         );
-        // `environ_sizes_get`
-        let ty = FuncType::create(vec![], vec![ValType::I32, ValType::I32])?;
-        custom_wasi_module.add_func(
-            "environ_sizes_get",
-            Function::create(&ty, Box::new(wasi_environ_sizes_get), 0)?,
-        );
         // `args_get`
-        let ty = FuncType::create(vec![ValType::ExternRef], vec![])?;
+        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
         custom_wasi_module.add_func(
             "args_get",
             Function::create(&ty, Box::new(wasi_args_get), 0)?,
         );
+        // `environ_sizes_get`
+        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
+        custom_wasi_module.add_func(
+            "environ_sizes_get",
+            Function::create(&ty, Box::new(wasi_environ_sizes_get), 0)?,
+        );
         // `environ_get`
-        let ty = FuncType::create(vec![ValType::ExternRef], vec![])?;
+        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
         custom_wasi_module.add_func(
             "environ_get",
             Function::create(&ty, Box::new(wasi_environ_get), 0)?,
+        );
+
+        // `fd_write`
+        let ty = FuncType::create(
+            vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            vec![ValType::I32],
+        )?;
+        custom_wasi_module.add_func(
+            "fd_write",
+            Function::create(&ty, Box::new(wasi_fd_write), 0)?,
+        );
+
+        // `proc_exit`
+        let ty = FuncType::create(vec![ValType::I32], vec![])?;
+        custom_wasi_module.add_func(
+            "proc_exit",
+            Function::create(&ty, Box::new(wasi_proc_exit), 0)?,
         );
 
         Ok(custom_wasi_module)
@@ -171,36 +174,47 @@ impl CustomWasiModule {
             }
         }
 
-        // add wasi host functions
-        let ty = FuncType::create(vec![ValType::I32], vec![])?;
-        self.add_func(
-            "proc_exit",
-            Function::create(&ty, Box::new(wasi_proc_exit), 0)?,
-        );
-        let ty = FuncType::create(vec![ValType::I32, ValType::ExternRef], vec![ValType::I32])?;
-        self.add_func(
-            "fd_write",
-            Function::create(&ty, Box::new(wasi_fd_write), 0)?,
-        );
-        let ty = FuncType::create(vec![], vec![ValType::I32, ValType::I32])?;
+        // * add wasi host functions
+
+        // `args_sizes_get`
+        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
         self.add_func(
             "args_sizes_get",
             Function::create(&ty, Box::new(wasi_args_sizes_get), 0)?,
         );
-        let ty = FuncType::create(vec![], vec![ValType::I32, ValType::I32])?;
-        self.add_func(
-            "environ_sizes_get",
-            Function::create(&ty, Box::new(wasi_environ_sizes_get), 0)?,
-        );
-        let ty = FuncType::create(vec![ValType::ExternRef], vec![])?;
+        // `args_get`
+        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
         self.add_func(
             "args_get",
             Function::create(&ty, Box::new(wasi_args_get), 0)?,
         );
-        let ty = FuncType::create(vec![ValType::ExternRef], vec![])?;
+        // `environ_sizes_get`
+        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
+        self.add_func(
+            "environ_sizes_get",
+            Function::create(&ty, Box::new(wasi_environ_sizes_get), 0)?,
+        );
+        // `environ_get`
+        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
         self.add_func(
             "environ_get",
             Function::create(&ty, Box::new(wasi_environ_get), 0)?,
+        );
+        // `fd_write`
+        let ty = FuncType::create(
+            vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            vec![ValType::I32],
+        )?;
+        self.add_func(
+            "fd_write",
+            Function::create(&ty, Box::new(wasi_fd_write), 0)?,
+        );
+
+        // `proc_exit`
+        let ty = FuncType::create(vec![ValType::I32], vec![])?;
+        self.add_func(
+            "proc_exit",
+            Function::create(&ty, Box::new(wasi_proc_exit), 0)?,
         );
 
         global_wasi_environ.exit_code = 0;
@@ -518,76 +532,146 @@ fn wasi_fd_write(_cf: CallingFrame, args: Vec<WasmValue>) -> Result<Vec<WasmValu
 
 /// Returns the number of arguments and the size of the argument string data, or an error.
 fn wasi_args_sizes_get(
-    _cf: CallingFrame,
-    _args: Vec<WasmValue>,
+    cf: CallingFrame,
+    args: Vec<WasmValue>,
 ) -> Result<Vec<WasmValue>, HostFuncError> {
     println!(">>> wasi_args_sizes_get begins");
+
+    let args_size_offset = args[0].to_i32();
+    let args_buf_size_offset = args[1].to_i32();
 
     let wasi_environ = WASI_ENVIRON.read();
     let (n_args, n_bytes) = wasi_environ.args_sizes_get();
 
+    let mut memory = cf
+        .memory_mut(0)
+        .expect("[wasi_args_sizes_get] memory not found");
+
+    memory
+        .set_data(n_args.to_le_bytes(), args_size_offset as u32)
+        .expect("[wasi_args_sizes_get] failed to write `n_args` to memory");
+    memory
+        .set_data(n_bytes.to_le_bytes(), args_buf_size_offset as u32)
+        .expect("[wasi_args_sizes_get] failed to write `n_bytes` to memory");
+
     println!("<<< wasi_args_sizes_get ends");
-    Ok(vec![
-        WasmValue::from_i32(n_args),
-        WasmValue::from_i32(n_bytes),
-    ])
+
+    Ok(vec![WasmValue::from_i32(0)])
 }
 
 /// `args_get` wasi host function
-fn wasi_args_get(_cf: CallingFrame, args: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
+fn wasi_args_get(cf: CallingFrame, args: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
     println!(">>> wasi_args_get begins");
 
+    let mut memory = cf
+        .memory_mut(0)
+        .expect("[wasi_args_sizes_get] memory not found");
+
     let wasi_environ = WASI_ENVIRON.read();
+
+    let (args_size, args_buf_size) = wasi_environ.args_sizes_get();
+
+    let args_offset = args[0].to_i32();
+    let args_buf_offset = args[1].to_i32();
 
     let mut args_vec = Vec::new();
     wasi_environ.args_get(&mut args_vec);
 
-    let out = args[0]
-        .extern_ref_mut::<MaybeUninit<Vec<Ciovec>>>()
-        .unwrap();
-    out.write(args_vec);
+    let args_mut_ref = memory
+        .data_pointer_mut(args_offset as u32, (args_size * 4) as u32)
+        .expect("[wasi_args_get] failed to get `args_ptr`");
+    let mut args_mut_ptr = args_mut_ref as *mut u8;
+
+    let args_buf_mut_ref = memory
+        .data_pointer_mut(args_buf_offset as u32, args_buf_size as u32)
+        .expect("[wasi_args_get] failed to get `args_buf_ptr`");
+    let mut args_buf_mut_ptr = args_buf_mut_ref as *mut u8;
+    for iov in args_vec.iter() {
+        unsafe {
+            args_buf_mut_ptr.copy_from(iov.buf, iov.buf_len);
+            args_buf_mut_ptr = args_buf_mut_ptr.add(iov.buf_len);
+
+            args_mut_ptr.copy_from(iov.buf_len.to_le_bytes().as_ptr(), 4);
+            args_mut_ptr = args_mut_ptr.add(4);
+        }
+    }
 
     println!("<<< wasi_args_get ends");
 
-    Ok(vec![])
+    Ok(vec![WasmValue::from_i32(0)])
 }
 
 fn wasi_environ_sizes_get(
-    _cf: CallingFrame,
-    _args: Vec<WasmValue>,
+    cf: CallingFrame,
+    args: Vec<WasmValue>,
 ) -> Result<Vec<WasmValue>, HostFuncError> {
     println!(">>> wasi_environ_sizes_get begins");
+
+    let environ_size_offset = args[0].to_i32();
+    let environ_buf_size_offset = args[1].to_i32();
 
     let wasi_environ = WASI_ENVIRON.read();
     let (n_envs, n_bytes) = wasi_environ.environ_sizes_get();
 
+    let mut memory = cf
+        .memory_mut(0)
+        .expect("[wasi_environ_sizes_get] memory not found");
+
+    memory
+        .set_data(n_envs.to_le_bytes(), environ_size_offset as u32)
+        .expect("[wasi_environ_sizes_get] failed to write `n_envs` to memory");
+    memory
+        .set_data(n_bytes.to_le_bytes(), environ_buf_size_offset as u32)
+        .expect("[wasi_environ_sizes_get] failed to write `n_bytes` to memory");
+
     println!("<<< wasi_environ_sizes_get ends");
-    Ok(vec![
-        WasmValue::from_i32(n_envs),
-        WasmValue::from_i32(n_bytes),
-    ])
+
+    Ok(vec![WasmValue::from_i32(0)])
 }
 
 /// `environ_get` wasi host function
 fn wasi_environ_get(
-    _cf: CallingFrame,
+    cf: CallingFrame,
     args: Vec<WasmValue>,
 ) -> Result<Vec<WasmValue>, HostFuncError> {
     println!(">>> wasi_environ_get begins");
 
+    let mut memory = cf
+        .memory_mut(0)
+        .expect("[wasi_args_sizes_get] memory not found");
+
     let wasi_environ = WASI_ENVIRON.read();
+
+    let (environ_size, environ_buf_size) = wasi_environ.environ_sizes_get();
+
+    let environ_offset = args[0].to_i32();
+    let environ_buf_offset = args[1].to_i32();
 
     let mut envs_vec = Vec::new();
     wasi_environ.environ_get(&mut envs_vec);
 
-    let out = args[0]
-        .extern_ref_mut::<MaybeUninit<Vec<Ciovec>>>()
-        .unwrap();
-    out.write(envs_vec);
+    let environ_mut_ref = memory
+        .data_pointer_mut(environ_offset as u32, (environ_size * 4) as u32)
+        .expect("[wasi_args_get] failed to get `args_ptr`");
+    let mut environ_mut_ptr = environ_mut_ref as *mut u8;
+
+    let environ_buf_mut_ref = memory
+        .data_pointer_mut(environ_buf_offset as u32, environ_buf_size as u32)
+        .expect("[wasi_args_get] failed to get `args_buf_ptr`");
+    let mut environ_buf_mut_ptr = environ_buf_mut_ref as *mut u8;
+    for iov in envs_vec.iter() {
+        unsafe {
+            environ_buf_mut_ptr.copy_from(iov.buf, iov.buf_len);
+            environ_buf_mut_ptr = environ_buf_mut_ptr.add(iov.buf_len);
+
+            environ_mut_ptr.copy_from(iov.buf_len.to_le_bytes().as_ptr(), 4);
+            environ_mut_ptr = environ_mut_ptr.add(4);
+        }
+    }
 
     println!("<<< wasi_environ_get ends");
 
-    Ok(vec![])
+    Ok(vec![WasmValue::from_i32(0)])
 }
 
 #[test]
@@ -674,6 +758,205 @@ fn test_import_custom_wasi() -> Result<(), Box<dyn std::error::Error>> {
     // run `proc_exit`
     let fn_proc_exit = custom_wasi_module.get_func("proc_exit")?;
     let _ = vm.run_func(&fn_proc_exit, [WasmValue::from_i32(1)]);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "custom_wasi")]
+fn test_wasi_args_sizes_get() -> Result<(), Box<dyn std::error::Error>> {
+    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+
+    let mut vm = NewVm::create(None)?;
+
+    // create a CustomWasiModule
+    let args = vec!["arg1", "arg2"];
+    let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
+    let mut import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+
+    // add a custom memory
+    let mem_ty = MemType::create(1, None, false)?;
+    let memory = Memory::create(&mem_ty)?;
+    import_custom_wasi.add_memory("memory", memory);
+
+    // register CustomWasiModule as an import module into vm
+    vm.register_instance_from_import(ImportObject::CustomWasi(import_custom_wasi))?;
+
+    let custom_wasi_module = vm.custom_wasi_module()?;
+
+    // run `args_sizes_get`
+    let fn_args_sizes_get = custom_wasi_module.get_func("args_sizes_get")?;
+    let result = vm.run_func(
+        &fn_args_sizes_get,
+        [WasmValue::from_i32(0), WasmValue::from_i32(4)],
+    );
+    assert!(result.is_ok());
+    let returns = result.unwrap();
+    assert_eq!(returns[0].to_i32(), 0);
+
+    // get the result from the linear memory
+    let memory = custom_wasi_module.get_memory("memory")?;
+    // get args_size
+    let data = memory.get_data(0, 4)?;
+    let args_size = i32::from_le_bytes(data.try_into().unwrap());
+    assert_eq!(args_size, 2);
+    // get args_buf_size
+    let data = memory.get_data(4, 4)?;
+    let args_buf_size = i32::from_le_bytes(data.try_into().unwrap());
+    assert_eq!(args_buf_size, 10);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "custom_wasi")]
+fn test_wasi_environ_sizes_get() -> Result<(), Box<dyn std::error::Error>> {
+    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+
+    let mut vm = NewVm::create(None)?;
+
+    // create a CustomWasiModule
+    let args = vec!["arg1", "arg2"];
+    let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
+    let mut import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+
+    // add a custom memory
+    let mem_ty = MemType::create(1, None, false)?;
+    let memory = Memory::create(&mem_ty)?;
+    import_custom_wasi.add_memory("memory", memory);
+
+    // register CustomWasiModule as an import module into vm
+    vm.register_instance_from_import(ImportObject::CustomWasi(import_custom_wasi))?;
+
+    let custom_wasi_module = vm.custom_wasi_module()?;
+
+    // run `args_sizes_get`
+    let fn_environ_sizes_get = custom_wasi_module.get_func("environ_sizes_get")?;
+    let result = vm.run_func(
+        &fn_environ_sizes_get,
+        [WasmValue::from_i32(0), WasmValue::from_i32(4)],
+    );
+    assert!(result.is_ok());
+    let returns = result.unwrap();
+    assert_eq!(returns[0].to_i32(), 0);
+
+    // get the result from the linear memory
+    let memory = custom_wasi_module.get_memory("memory")?;
+    // get environ_size
+    let data = memory.get_data(0, 4)?;
+    let environ_size = i32::from_le_bytes(data.try_into().unwrap());
+    assert_eq!(environ_size, 3);
+    // get environ_buf_size
+    let data = memory.get_data(4, 4)?;
+    let environ_buf_size = i32::from_le_bytes(data.try_into().unwrap());
+    assert_eq!(environ_buf_size, 30);
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "custom_wasi")]
+fn test_wasi_args_get() -> Result<(), Box<dyn std::error::Error>> {
+    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+
+    let mut vm = NewVm::create(None)?;
+
+    // create a CustomWasiModule
+    let args = vec!["arg1", "arg2"];
+    let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
+    let mut import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+
+    // add a custom memory
+    let mem_ty = MemType::create(1, None, false)?;
+    let memory = Memory::create(&mem_ty)?;
+    import_custom_wasi.add_memory("memory", memory);
+
+    // register CustomWasiModule as an import module into vm
+    vm.register_instance_from_import(ImportObject::CustomWasi(import_custom_wasi))?;
+
+    let custom_wasi_module = vm.custom_wasi_module()?;
+
+    // run `args_get`
+    let fn_args_get = custom_wasi_module.get_func("args_get")?;
+    let result = vm.run_func(
+        &fn_args_get,
+        [WasmValue::from_i32(0), WasmValue::from_i32(8)],
+    );
+    assert!(result.is_ok());
+    let returns = result.unwrap();
+    assert_eq!(returns[0].to_i32(), 0);
+
+    // get the result from the linear memory
+    let memory = custom_wasi_module.get_memory("memory")?;
+    // get args_size
+    let offset_vec = memory.get_data(0, 8)?;
+    let arg1_buf_size = u32::from_le_bytes(offset_vec[0..4].try_into().unwrap());
+    dbg!(arg1_buf_size);
+    let arg2_buf_size = u32::from_le_bytes(offset_vec[4..8].try_into().unwrap());
+    dbg!(arg2_buf_size);
+    // get args_buf_size
+    let data = memory.get_data(8, arg1_buf_size)?;
+    let argument = std::str::from_utf8(&data)?;
+    assert_eq!(argument, "arg1");
+    let data = memory.get_data(8 + arg1_buf_size, arg2_buf_size)?;
+    let argument = std::str::from_utf8(&data)?;
+    assert_eq!(argument, "arg2");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "custom_wasi")]
+fn test_wasi_environ_get() -> Result<(), Box<dyn std::error::Error>> {
+    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+
+    let mut vm = NewVm::create(None)?;
+
+    // create a CustomWasiModule
+    let args = vec!["arg1", "arg2"];
+    let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
+    let mut import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+
+    // add a custom memory
+    let mem_ty = MemType::create(1, None, false)?;
+    let memory = Memory::create(&mem_ty)?;
+    import_custom_wasi.add_memory("memory", memory);
+
+    // register CustomWasiModule as an import module into vm
+    vm.register_instance_from_import(ImportObject::CustomWasi(import_custom_wasi))?;
+
+    let custom_wasi_module = vm.custom_wasi_module()?;
+
+    // run `args_get`
+    let fn_environ_get = custom_wasi_module.get_func("environ_get")?;
+    let result = vm.run_func(
+        &fn_environ_get,
+        [WasmValue::from_i32(0), WasmValue::from_i32(8)],
+    );
+    assert!(result.is_ok());
+    let returns = result.unwrap();
+    assert_eq!(returns[0].to_i32(), 0);
+
+    // get the result from the linear memory
+    let memory = custom_wasi_module.get_memory("memory")?;
+    // get args_size
+    let offset_vec = memory.get_data(0, 12)?;
+    let env1_buf_size = u32::from_le_bytes(offset_vec[0..4].try_into().unwrap());
+    dbg!(env1_buf_size);
+    let env2_buf_size = u32::from_le_bytes(offset_vec[4..8].try_into().unwrap());
+    dbg!(env2_buf_size);
+    let env3_buf_size = u32::from_le_bytes(offset_vec[8..12].try_into().unwrap());
+    dbg!(env3_buf_size);
+    // get args_buf_size
+    let data = memory.get_data(12, env1_buf_size)?;
+    let argument = std::str::from_utf8(&data)?;
+    assert_eq!(argument, "ENV1=VAL1");
+    // let data = memory.get_data(12 + env1_buf_size, env2_buf_size)?;
+    // let argument = std::str::from_utf8(&data)?;
+    // assert_eq!(argument, "arg2");
+    // let data = memory.get_data(12 + env2_buf_size, env3_buf_size)?;
+    // let argument = std::str::from_utf8(&data)?;
+    // assert_eq!(argument, "arg2");
 
     Ok(())
 }
