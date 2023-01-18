@@ -20,7 +20,7 @@ use wasmedge_wasi_common::{Ciovec, CiovecArray, WasiSnapshotPreview1};
 pub struct CustomWasiModule {
     pub(crate) inner: Arc<InnerInstance>,
     pub(crate) registered: bool,
-    name: String,
+    pub(crate) name: String,
 }
 impl Drop for CustomWasiModule {
     fn drop(&mut self) {
@@ -90,7 +90,8 @@ impl CustomWasiModule {
             name: name.to_string(),
         };
 
-        // add wasi host functions
+        // add wasi host
+        // `proc_exit`
         let ty = FuncType::create(vec![ValType::I32], vec![])?;
         // let data =
         //     (&mut custom_wasi_module.environ) as *mut WasiEnviron as *mut std::os::raw::c_void;
@@ -99,26 +100,31 @@ impl CustomWasiModule {
             "proc_exit",
             Function::create(&ty, Box::new(wasi_proc_exit), 0)?,
         );
+        // `fd_write`
         let ty = FuncType::create(vec![ValType::I32, ValType::ExternRef], vec![ValType::I32])?;
         custom_wasi_module.add_func(
             "fd_write",
             Function::create(&ty, Box::new(wasi_fd_write), 0)?,
         );
+        // `args_sizes_get`
         let ty = FuncType::create(vec![], vec![ValType::I32, ValType::I32])?;
         custom_wasi_module.add_func(
             "args_sizes_get",
             Function::create(&ty, Box::new(wasi_args_sizes_get), 0)?,
         );
+        // `environ_sizes_get`
         let ty = FuncType::create(vec![], vec![ValType::I32, ValType::I32])?;
         custom_wasi_module.add_func(
             "environ_sizes_get",
             Function::create(&ty, Box::new(wasi_environ_sizes_get), 0)?,
         );
+        // `args_get`
         let ty = FuncType::create(vec![ValType::ExternRef], vec![])?;
         custom_wasi_module.add_func(
             "args_get",
             Function::create(&ty, Box::new(wasi_args_get), 0)?,
         );
+        // `environ_get`
         let ty = FuncType::create(vec![ValType::ExternRef], vec![])?;
         custom_wasi_module.add_func(
             "environ_get",
@@ -143,24 +149,23 @@ impl CustomWasiModule {
         envs: Option<Vec<(&str, &str)>>,
         preopened_dirs: Option<Vec<(cap_std::fs::Dir, &std::path::Path)>>,
     ) -> WasmEdgeResult<()> {
+        let mut global_wasi_environ = WASI_ENVIRON.write();
+
         // parse arguments
         if let Some(args) = args {
             for arg in args {
-                let mut global_wasi_environ = WASI_ENVIRON.write();
                 global_wasi_environ.push_arg(arg);
             }
         }
         // parse environment variables
         if let Some(envs) = envs {
             for (var, val) in envs {
-                let mut global_wasi_environ = WASI_ENVIRON.write();
                 global_wasi_environ.push_env(var, val);
             }
         }
         // parse preopened directories
         if let Some(preopened_dirs) = preopened_dirs {
             for (dir, guest_path) in preopened_dirs {
-                let mut global_wasi_environ = WASI_ENVIRON.write();
                 let dir = Box::new(wasmedge_wasi::dir::Dir::from_cap_std(dir));
                 global_wasi_environ.push_preopened_dir(dir, guest_path);
             }
@@ -198,62 +203,14 @@ impl CustomWasiModule {
             Function::create(&ty, Box::new(wasi_environ_get), 0)?,
         );
 
+        global_wasi_environ.exit_code = 0;
+
         Ok(())
-
-        // // parse args
-        // let cstr_args: Vec<_> = match args {
-        //     Some(args) => args
-        //         .iter()
-        //         .map(|&x| std::ffi::CString::new(x).unwrap())
-        //         .collect(),
-        //     None => vec![],
-        // };
-        // let mut p_args: Vec<_> = cstr_args.iter().map(|x| x.as_ptr()).collect();
-        // let p_args_len = p_args.len();
-        // p_args.push(std::ptr::null());
-
-        // // parse envs
-        // let cstr_envs: Vec<_> = match envs {
-        //     Some(envs) => envs
-        //         .iter()
-        //         .map(|&x| std::ffi::CString::new(x).unwrap())
-        //         .collect(),
-        //     None => vec![],
-        // };
-        // let mut p_envs: Vec<_> = cstr_envs.iter().map(|x| x.as_ptr()).collect();
-        // let p_envs_len = p_envs.len();
-        // p_envs.push(std::ptr::null());
-
-        // // parse preopens
-        // let cstr_preopens: Vec<_> = match preopens {
-        //     Some(preopens) => preopens
-        //         .iter()
-        //         .map(|&x| std::ffi::CString::new(x).unwrap())
-        //         .collect(),
-        //     None => vec![],
-        // };
-        // let mut p_preopens: Vec<_> = cstr_preopens.iter().map(|x| x.as_ptr()).collect();
-        // let p_preopens_len = p_preopens.len();
-        // p_preopens.push(std::ptr::null());
-
-        // unsafe {
-        //     ffi::WasmEdge_ModuleInstanceInitWASI(
-        //         self.inner.0,
-        //         p_args.as_ptr(),
-        //         p_args_len as u32,
-        //         p_envs.as_ptr(),
-        //         p_envs_len as u32,
-        //         p_preopens.as_ptr(),
-        //         p_preopens_len as u32,
-        //     )
-        // };
     }
 
-    /// Returns the WASI exit code.
-    ///
-    /// The WASI exit code can be accessed after running the "_start" function of a `wasm32-wasi` program.
-    pub fn exit_code(&self) -> u32 {
-        unsafe { ffi::WasmEdge_ModuleInstanceWASIGetExitCode(self.inner.0 as *const _) }
+    pub fn exit_code(&self) -> i32 {
+        let global_wasi_environ = WASI_ENVIRON.read();
+        global_wasi_environ.exit_code
     }
 
     /// Returns the native handler from the mapped FD/Handler.
@@ -522,10 +479,10 @@ fn wasi_proc_exit(
 ) -> Result<Vec<WasmValue>, HostFuncError> {
     println!(">>> wasi_proc_exit begins");
 
-    let code = args[0].to_i32();
+    let exit_code = args[0].to_i32();
     // let wasi_environ: &mut WasiEnviron = unsafe { &mut *(data as *mut WasiEnviron) };
     let mut wasi_environ = WASI_ENVIRON.write();
-    wasi_environ.proc_exit(code);
+    wasi_environ.proc_exit(exit_code);
 
     println!("<<< wasi_proc_exit ends");
     Ok(vec![])
@@ -631,4 +588,92 @@ fn wasi_environ_get(
     println!("<<< wasi_environ_get ends");
 
     Ok(vec![])
+}
+
+#[test]
+#[cfg(feature = "custom_wasi")]
+fn test_import_custom_wasi() -> Result<(), Box<dyn std::error::Error>> {
+    use crate::{vm_new::NewVm, Engine, ImportObject};
+    use std::mem::MaybeUninit;
+    use wasmedge_wasi_common::{Ciovec, CiovecArray};
+
+    let mut vm = NewVm::create(None)?;
+
+    // create a CustomWasiModule
+    let args = vec!["arg1", "arg2"];
+    let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
+    let import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+
+    vm.register_instance_from_import(ImportObject::CustomWasi(import_custom_wasi))?;
+
+    let custom_wasi_module = vm.custom_wasi_module()?;
+
+    // run `args_sizes_get`
+    let fn_args_sizes_get = custom_wasi_module.get_func("args_sizes_get")?;
+    let result = vm.run_func(&fn_args_sizes_get, []);
+    assert!(result.is_ok());
+    let returns = result.unwrap();
+    assert_eq!((returns[0].to_i32(), returns[1].to_i32()), (2, 10));
+
+    // run `args_get`
+    let fn_args_get = custom_wasi_module.get_func("args_get")?;
+    let mut iovs: MaybeUninit<Vec<Ciovec>> = MaybeUninit::uninit();
+    let result = vm.run_func(&fn_args_get, [WasmValue::from_extern_ref(&mut iovs)]);
+    assert!(result.is_ok());
+    let iovs = unsafe { iovs.assume_init() };
+    // parse the arguments returned
+    let mut args_get = vec![];
+    for iov in iovs {
+        let buf = unsafe { std::slice::from_raw_parts(iov.buf, iov.buf_len) };
+        let s = std::str::from_utf8(buf).unwrap();
+        args_get.push(s);
+    }
+    assert_eq!(args_get, ["arg1", "arg2"]);
+
+    // run `environ_sizes_get`
+    let fn_environ_sizes_get = custom_wasi_module.get_func("environ_sizes_get")?;
+    let result = vm.run_func(&fn_environ_sizes_get, []);
+    assert!(result.is_ok());
+    let returns = result.unwrap();
+    assert_eq!((returns[0].to_i32(), returns[1].to_i32()), (3, 30));
+
+    // run `environ_get`
+    let mut iovs: MaybeUninit<Vec<Ciovec>> = MaybeUninit::uninit();
+    let fn_environ_get = custom_wasi_module.get_func("environ_get")?;
+    let result = vm.run_func(&fn_environ_get, [WasmValue::from_extern_ref(&mut iovs)]);
+    assert!(result.is_ok());
+    let iovs = unsafe { iovs.assume_init() };
+    // parse the environment variables returned
+    let mut envs_get = vec![];
+    for iov in iovs {
+        let buf = unsafe { std::slice::from_raw_parts(iov.buf, iov.buf_len) };
+        let s = std::str::from_utf8(buf).unwrap();
+        envs_get.push(s);
+    }
+    assert_eq!(envs_get, ["ENV1=VAL1", "ENV2=VAL2", "ENV3=VAL3"]);
+
+    // run `fd_write`
+    let fn_fd_write = custom_wasi_module.get_func("fd_write")?;
+    let s = "Hello, world!";
+    let iov = Ciovec {
+        buf: s.as_ptr(),
+        buf_len: s.as_bytes().len(),
+    };
+    let mut iovs: CiovecArray<'_> = &[iov];
+    let result = vm.run_func(
+        &fn_fd_write,
+        [
+            WasmValue::from_i32(4),
+            WasmValue::from_extern_ref(&mut iovs),
+        ],
+    );
+    assert!(result.is_ok());
+    let returns = result.unwrap();
+    assert_eq!(returns[0].to_i32(), 13);
+
+    // run `proc_exit`
+    let fn_proc_exit = custom_wasi_module.get_func("proc_exit")?;
+    let _ = vm.run_func(&fn_proc_exit, [WasmValue::from_i32(1)]);
+
+    Ok(())
 }
