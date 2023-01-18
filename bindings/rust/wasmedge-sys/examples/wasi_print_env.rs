@@ -10,34 +10,59 @@
 //! cargo run -p wasmedge-sys --example wasi_print_env
 //! ```
 
-use wasmedge_sys::{Config, Vm};
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // enable the `wasi` option
-    let mut config = Config::create()?;
-    config.wasi(true);
+    #[cfg(not(feature = "custom_wasi"))]
+    {
+        use wasmedge_sys::{Config, Vm};
 
-    // create a vm
-    let mut vm = Vm::create(Some(config), None)?;
+        // enable the `wasi` option
+        let mut config = Config::create()?;
+        config.wasi(true);
 
-    // set the envs and args for the wasi module
-    let args = vec!["arg1", "arg2"];
-    let envs = vec!["ENV1=VAL1", "ENV2=VAL2", "ENV3=VAL3"];
-    let mut wasi_module = vm.wasi_module_mut()?;
-    wasi_module.init_wasi(Some(args), Some(envs), None);
+        // create a vm
+        let mut vm = Vm::create(Some(config), None)?;
 
-    assert_eq!(wasi_module.exit_code(), 0);
+        // set the envs and args for the wasi module
+        let args = vec!["arg1", "arg2"];
+        let envs = vec!["ENV1=VAL1", "ENV2=VAL2", "ENV3=VAL3"];
+        let mut wasi_module = vm.wasi_module_mut()?;
+        wasi_module.init_wasi(Some(args), Some(envs), None);
 
-    // load wasm module
-    let wasm_file = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
+        assert_eq!(wasi_module.exit_code(), 0);
+
+        // load wasm module
+        let wasm_file = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
         .join("bindings/rust/wasmedge-sys/examples/wasi_print_env/target/wasm32-wasi/release/wasi_print_env.wasm");
-    vm.load_wasm_from_file(wasm_file)?;
+        vm.load_wasm_from_file(wasm_file)?;
 
-    vm.validate()?;
+        vm.validate()?;
 
-    vm.instantiate()?;
+        vm.instantiate()?;
 
-    vm.run_function("print_env", vec![])?;
+        vm.run_function("print_env", vec![])?;
+    }
+
+    #[cfg(feature = "custom_wasi")]
+    {
+        use wasmedge_sys::{vm_new::NewVm, Config};
+
+        // enable the `wasi` option
+        let mut config = Config::create()?;
+        config.wasi(true);
+
+        // create a vm
+        let mut vm = NewVm::create(Some(config))?;
+
+        let args = vec!["arg1", "arg2"];
+        let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
+        let custom_wasi_module = vm.custom_wasi_module_mut()?;
+        custom_wasi_module.init(Some(args), Some(envs), None)?;
+        assert_eq!(custom_wasi_module.exit_code(), 0);
+
+        let wasm_file = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
+        .join("bindings/rust/wasmedge-sys/examples/wasi_print_env/target/wasm32-wasi/release/wasi_print_env.wasm");
+        vm.run_wasm_from_file(&wasm_file, "print_env", [])?;
+    }
 
     Ok(())
 }
