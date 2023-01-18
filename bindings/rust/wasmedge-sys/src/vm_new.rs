@@ -1100,7 +1100,66 @@ mod tests {
     }
 
     #[test]
-    fn test_vm_new_register_wasm_from_bytes() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_vm_new_register_instance_from_import() -> Result<(), Box<dyn std::error::Error>> {
+        // create a Config context
+        let mut config = Config::create()?;
+        config.bulk_memory_operations(true);
+        assert!(config.bulk_memory_operations_enabled());
+        config.wasi(true);
+        assert!(config.wasi_enabled());
+
+        // create a Vm context with the given Config and Store
+        let mut vm = NewVm::create(Some(config))?;
+
+        // create import module
+        let mut import = ImportModule::create("extern")?;
+
+        // add host function
+        let func_ty = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32])?;
+        let host_func = Function::create(&func_ty, Box::new(real_add), 0)?;
+        import.add_func("add", host_func);
+
+        // register the import_obj module
+        vm.register_instance_from_import(ImportObject::Import(import))?;
+
+        // get ImportObj module
+        #[cfg(not(feature = "custom_wasi"))]
+        assert!(vm.wasi_module().is_ok());
+        #[cfg(feature = "custom_wasi")]
+        assert!(vm.custom_wasi_module().is_ok());
+        #[cfg(target_os = "linux")]
+        {
+            let result = vm.wasmedge_process_module_mut();
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err(),
+                Box::new(WasmEdgeError::Vm(VmError::NotFoundWasmEdgeProcessModule))
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vm_new_register_instance_from_file() -> Result<(), Box<dyn std::error::Error>> {
+        // create a Config context
+        let mut config = Config::create()?;
+        config.bulk_memory_operations(true);
+        assert!(config.bulk_memory_operations_enabled());
+
+        // create a Vm context with the given Config and Store
+        let mut vm = NewVm::create(Some(config))?;
+
+        // register a wasm module from a buffer
+        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
+            .join("bindings/rust/wasmedge-sys/examples/data/fibonacci.wat");
+        vm.register_instance_from_file("reg-wasm-buffer", path)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_vm_new_register_instance_from_bytes() -> Result<(), Box<dyn std::error::Error>> {
         // create a Config context
         let mut config = Config::create()?;
         config.bulk_memory_operations(true);
@@ -1150,67 +1209,8 @@ mod tests {
     }
 
     #[test]
-    fn test_vm_new_register_wasm_from_import() -> Result<(), Box<dyn std::error::Error>> {
-        // create a Config context
-        let mut config = Config::create()?;
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-        config.wasi(true);
-        assert!(config.wasi_enabled());
-
-        // create a Vm context with the given Config and Store
-        let mut vm = NewVm::create(Some(config))?;
-
-        // create import module
-        let mut import = ImportModule::create("extern")?;
-
-        // add host function
-        let func_ty = FuncType::create(vec![ValType::I32; 2], vec![ValType::I32])?;
-        let host_func = Function::create(&func_ty, Box::new(real_add), 0)?;
-        import.add_func("add", host_func);
-
-        // register the import_obj module
-        vm.register_instance_from_import(ImportObject::Import(import))?;
-
-        // get ImportObj module
-        #[cfg(not(feature = "custom_wasi"))]
-        assert!(vm.wasi_module().is_ok());
-        #[cfg(feature = "custom_wasi")]
-        assert!(vm.custom_wasi_module().is_ok());
-        #[cfg(target_os = "linux")]
-        {
-            let result = vm.wasmedge_process_module_mut();
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err(),
-                Box::new(WasmEdgeError::Vm(VmError::NotFoundWasmEdgeProcessModule))
-            );
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_vm_new_register_wasm_from_file() -> Result<(), Box<dyn std::error::Error>> {
-        // create a Config context
-        let mut config = Config::create()?;
-        config.bulk_memory_operations(true);
-        assert!(config.bulk_memory_operations_enabled());
-
-        // create a Vm context with the given Config and Store
-        let mut vm = NewVm::create(Some(config))?;
-
-        // register a wasm module from a buffer
-        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
-            .join("bindings/rust/wasmedge-sys/examples/data/fibonacci.wat");
-        vm.register_instance_from_file("reg-wasm-buffer", path)?;
-
-        Ok(())
-    }
-
-    #[test]
     #[cfg(unix)]
-    fn test_vm_new_wasi_module() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_vm_new_get_wasi_module() -> Result<(), Box<dyn std::error::Error>> {
         {
             // create a Config context
             let mut config = Config::create()?;
@@ -1302,7 +1302,7 @@ mod tests {
     #[test]
     #[cfg(all(not(feature = "static"), target_os = "linux"))]
     #[allow(clippy::assertions_on_result_states)]
-    fn test_vm_new_wasmedge_process_module() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_vm_new_get_wasmedge_process_module() -> Result<(), Box<dyn std::error::Error>> {
         use crate::{utils, WasmEdgeProcessModule};
 
         // load wasmedge_process plugins
