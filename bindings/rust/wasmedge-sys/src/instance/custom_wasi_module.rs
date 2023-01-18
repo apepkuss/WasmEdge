@@ -551,14 +551,8 @@ fn wasi_fd_write(_cf: CallingFrame, args: Vec<WasmValue>) -> Result<Vec<WasmValu
     let fd = args[0].to_i32();
 
     let iovs = *args[1].extern_ref::<CiovecArray<'_>>().unwrap();
-    let mut io_slice_vec = vec![];
-    for iov in iovs {
-        let buf: &[u8] = unsafe { std::slice::from_raw_parts(iov.buf, iov.buf_len) };
-        let io_slice = std::io::IoSlice::new(buf);
-        io_slice_vec.push(io_slice);
-    }
 
-    let nwritten = wasi_environ.fd_write(fd, &io_slice_vec);
+    let nwritten = wasi_environ.fd_write(fd, iovs);
 
     println!("<<< wasi_fd_write ends");
 
