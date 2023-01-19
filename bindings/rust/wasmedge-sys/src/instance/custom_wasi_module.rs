@@ -514,20 +514,36 @@ fn wasi_proc_exit(
 /// - `fd`: i32
 /// - `iovs`: ExternRef
 /// - `nwritten`: i32 (out)
-fn wasi_fd_write(_cf: CallingFrame, args: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
+fn wasi_fd_write(cf: CallingFrame, args: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
     println!(">>> wasi_fd_write begins");
 
-    let mut wasi_environ = WASI_ENVIRON.write();
+    let mut memory = cf.memory_mut(0).expect("[wasi_fd_write] memory not found");
 
+    // parse data
+    let iovs_offset = args[1].to_i32() as u32;
+    let iovs_len = args[2].to_i32() as u32;
+    let data = memory
+        .get_data(iovs_offset, iovs_len * std::mem::size_of::<Ciovec>() as u32)
+        .unwrap();
+    let data_ptr = data.as_ptr() as *const Ciovec;
+    let iovs = unsafe { std::slice::from_raw_parts(data_ptr, iovs_len as usize) };
+
+    // parse fd
     let fd = args[0].to_i32();
 
-    let iovs = *args[1].extern_ref::<CiovecArray<'_>>().unwrap();
-
+    // write data out
+    let mut wasi_environ = WASI_ENVIRON.write();
     let nwritten = wasi_environ.fd_write(fd, iovs);
+
+    // write `nwritten` back to memory
+    let nwritten_offset = args[3].to_i32() as u32;
+    memory
+        .set_data(nwritten.to_le_bytes(), nwritten_offset)
+        .expect("[wasi_fd_write] failed to write `nwritten` to memory");
 
     println!("<<< wasi_fd_write ends");
 
-    Ok(vec![WasmValue::from_i32(nwritten)])
+    Ok(vec![WasmValue::from_i32(0)])
 }
 
 /// Returns the number of arguments and the size of the argument string data, or an error.
@@ -579,12 +595,12 @@ fn wasi_args_get(cf: CallingFrame, args: Vec<WasmValue>) -> Result<Vec<WasmValue
 
     let args_mut_ref = memory
         .data_pointer_mut(args_offset as u32, (args_size * 4) as u32)
-        .expect("[wasi_args_get] failed to get `args_ptr`");
+        .expect("[wasi_args_get] failed to get `args_mut_ref`");
     let mut args_mut_ptr = args_mut_ref as *mut u8;
 
     let args_buf_mut_ref = memory
         .data_pointer_mut(args_buf_offset as u32, args_buf_size as u32)
-        .expect("[wasi_args_get] failed to get `args_buf_ptr`");
+        .expect("[wasi_args_get] failed to get `args_buf_mut_ref`");
     let mut args_buf_mut_ptr = args_buf_mut_ref as *mut u8;
     for iov in args_vec.iter() {
         unsafe {
@@ -957,6 +973,70 @@ fn test_wasi_environ_get() -> Result<(), Box<dyn std::error::Error>> {
     // let data = memory.get_data(12 + env2_buf_size, env3_buf_size)?;
     // let argument = std::str::from_utf8(&data)?;
     // assert_eq!(argument, "arg2");
+
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "custom_wasi")]
+fn test_wasi_fd_write() -> Result<(), Box<dyn std::error::Error>> {
+    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+
+    let mut vm = NewVm::create(None)?;
+
+    // create a CustomWasiModule
+    let args = vec!["arg1", "arg2"];
+    let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
+    let mut import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+
+    // add a custom memory
+    let mem_ty = MemType::create(1, None, false)?;
+    let mut memory = Memory::create(&mem_ty)?;
+
+    // write strings to memory
+    let offset = 0;
+    let s1 = "Hello, world!".as_bytes();
+    memory.set_data(s1, 0)?;
+    let s1_ref = memory.data_pointer(offset, s1.len() as u32)?;
+    let iov1 = Ciovec {
+        buf: s1_ref as *const u8,
+        buf_len: s1.len(),
+    };
+    let s2 = "This is a test.".as_bytes();
+    memory.set_data(s2, s1.len() as u32)?;
+    let s2_ref = memory.data_pointer(offset + s1.len() as u32, s2.len() as u32)?;
+    let iov2 = Ciovec {
+        buf: s2_ref as *const u8,
+        buf_len: s2.len(),
+    };
+    let iovs = vec![iov1, iov2];
+    let iovs_len = iovs.len();
+    let iovs_ptr = iovs.as_ptr() as *const u8;
+    let iovs_buf =
+        unsafe { std::slice::from_raw_parts(iovs_ptr, std::mem::size_of::<Ciovec>() * iovs.len()) };
+    let iovs_offset = offset + s1.len() as u32 + s2.len() as u32;
+    memory.set_data(iovs_buf, iovs_offset)?;
+
+    // add memory to CustomWasiModule
+    import_custom_wasi.add_memory("memory", memory);
+
+    // register CustomWasiModule as an import module into vm
+    vm.register_instance_from_import(ImportObject::CustomWasi(import_custom_wasi))?;
+
+    let custom_wasi_module = vm.custom_wasi_module()?;
+
+    let fn_fd_write = custom_wasi_module.get_func("fd_write")?;
+    let mut nwritten = 0;
+    let result = vm.run_func(
+        &fn_fd_write,
+        [
+            WasmValue::from_i32(4),
+            WasmValue::from_i32(iovs_offset as i32),
+            WasmValue::from_i32(iovs_len as i32),
+            WasmValue::from_i32(nwritten),
+        ],
+    );
+    assert!(result.is_ok());
 
     Ok(())
 }
