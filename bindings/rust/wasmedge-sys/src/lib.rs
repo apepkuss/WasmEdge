@@ -146,7 +146,8 @@ extern crate lazy_static;
 
 use parking_lot::{Mutex, RwLock};
 use std::{collections::HashMap, env, sync::Arc};
-use wasmedge_wasi::WasiEnviron;
+use wasmedge_wasi::WasiEnvironBuilder;
+use wasmedge_wasi_common::environ::WasiEnviron;
 
 #[doc(hidden)]
 #[allow(warnings)]
@@ -250,8 +251,10 @@ lazy_static! {
         ));
 }
 
+#[cfg(feature = "custom_wasi")]
 lazy_static! {
-    static ref WASI_ENVIRON: RwLock<WasiEnviron> = RwLock::new(WasiEnviron::new());
+    static ref WASI_ENVIRON: RwLock<WasiEnviron> =
+        RwLock::new(WasiEnvironBuilder::new().inherit_stdio().build());
 }
 
 #[cfg(feature = "async")]
