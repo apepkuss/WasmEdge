@@ -481,6 +481,8 @@ impl AsImport for CustomWasiModule {
     }
 }
 
+// ************** wasi host functions **************
+
 /// `proc_exit` wasi host function
 ///
 /// ```ignore
