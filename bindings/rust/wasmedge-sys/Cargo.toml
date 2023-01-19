@@ -22,8 +22,8 @@ rand = "0.8.4"
 thiserror = "1.0.30"
 wasmedge-macro = {path = "../wasmedge-macro", version = "0.3"}
 wasmedge-types = {path = "../wasmedge-types", version = "0.4"}
-wasmedge-wasi = {path = "/Volumes/Dev/secondstate/me/wasmedge-wasi/wasmedge-wasi"}
-wasmedge-wasi-common = {path = "/Volumes/Dev/secondstate/me/wasmedge-wasi/wasmedge-wasi-common"}
+wasmedge-wasi = {path = "../../../../wasmedge-wasi/wasmedge-wasi"}
+wasmedge-wasi-common = {path = "../../../../wasmedge-wasi/wasmedge-wasi-common"}
 wasmtime-fiber = {version = "2", optional = true}
 wat = "1.0"
 
@@ -38,7 +38,8 @@ tokio = {version = "1", features = ["full"]}
 [features]
 aot = []
 async = ["wasmtime-fiber"]
-default = []
+custom_wasi = []
+default = ["custom_wasi"]
 standalone = []
 static = []
 wasi_crypto = []
