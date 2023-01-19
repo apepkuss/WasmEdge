@@ -1025,18 +1025,25 @@ fn test_wasi_fd_write() -> Result<(), Box<dyn std::error::Error>> {
 
     let custom_wasi_module = vm.custom_wasi_module()?;
 
+    // run `fd_write`
     let fn_fd_write = custom_wasi_module.get_func("fd_write")?;
-    let mut nwritten = 0;
+    let nwritten_offset = iovs_offset + iovs_buf.len() as u32;
     let result = vm.run_func(
         &fn_fd_write,
         [
             WasmValue::from_i32(4),
             WasmValue::from_i32(iovs_offset as i32),
             WasmValue::from_i32(iovs_len as i32),
-            WasmValue::from_i32(nwritten),
+            WasmValue::from_i32(nwritten_offset as i32),
         ],
     );
     assert!(result.is_ok());
+
+    // parse the `n_written_bytes` from memory
+    let memory = custom_wasi_module.get_memory("memory")?;
+    let data = memory.get_data(nwritten_offset, 4)?;
+    let n_written_bytes = u32::from_le_bytes(data.try_into().unwrap());
+    assert_eq!(n_written_bytes, 28);
 
     Ok(())
 }
