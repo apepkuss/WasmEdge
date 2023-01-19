@@ -1039,7 +1039,7 @@ fn test_wasi_fd_write() -> Result<(), Box<dyn std::error::Error>> {
     let result = vm.run_func(
         &fn_fd_write,
         [
-            WasmValue::from_i32(4),
+            WasmValue::from_i32(1), // stdout
             WasmValue::from_i32(iovs_offset as i32),
             WasmValue::from_i32(iovs_len as i32),
             WasmValue::from_i32(nwritten_offset as i32),
