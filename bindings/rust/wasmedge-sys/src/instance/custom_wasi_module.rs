@@ -50,34 +50,10 @@ impl CustomWasiModule {
         envs: Option<Vec<(&str, &str)>>,
         preopened_dirs: Option<Vec<(cap_std::fs::Dir, &std::path::Path)>>,
     ) -> WasmEdgeResult<Self> {
-        // parse arguments
-        if let Some(args) = args {
-            for arg in args {
-                let mut global_wasi_environ = WASI_ENVIRON.write();
-                global_wasi_environ.push_arg(arg);
-            }
-        }
-        // parse environment variables
-        if let Some(envs) = envs {
-            for (var, val) in envs {
-                let mut global_wasi_environ = WASI_ENVIRON.write();
-                global_wasi_environ.push_env(var, val);
-            }
-        }
-        // parse preopened directories
-        if let Some(preopened_dirs) = preopened_dirs {
-            for (dir, guest_path) in preopened_dirs {
-                let mut global_wasi_environ = WASI_ENVIRON.write();
-                let dir = Box::new(wasmedge_wasi::dir::Dir::from_cap_std(dir));
-                global_wasi_environ.push_preopened_dir(dir, guest_path);
-            }
-        }
-
         // create an import module named `wasi_snapshot_preview1`
         let name = "wasi_snapshot_preview1";
         let raw_name = WasmEdgeString::from(name);
         let ctx = unsafe { ffi::WasmEdge_ModuleInstanceCreate(raw_name.as_raw()) };
-
         if ctx.is_null() {
             return Err(Box::new(WasmEdgeError::Instance(
                 InstanceError::CreateImportModule,
@@ -90,49 +66,7 @@ impl CustomWasiModule {
             name: name.to_string(),
         };
 
-        // * add wasi host functions
-
-        // `args_sizes_get`
-        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
-        custom_wasi_module.add_func(
-            "args_sizes_get",
-            Function::create(&ty, Box::new(wasi_args_sizes_get), 0)?,
-        );
-        // `args_get`
-        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
-        custom_wasi_module.add_func(
-            "args_get",
-            Function::create(&ty, Box::new(wasi_args_get), 0)?,
-        );
-        // `environ_sizes_get`
-        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
-        custom_wasi_module.add_func(
-            "environ_sizes_get",
-            Function::create(&ty, Box::new(wasi_environ_sizes_get), 0)?,
-        );
-        // `environ_get`
-        let ty = FuncType::create(vec![ValType::I32, ValType::I32], vec![ValType::I32])?;
-        custom_wasi_module.add_func(
-            "environ_get",
-            Function::create(&ty, Box::new(wasi_environ_get), 0)?,
-        );
-
-        // `fd_write`
-        let ty = FuncType::create(
-            vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32],
-            vec![ValType::I32],
-        )?;
-        custom_wasi_module.add_func(
-            "fd_write",
-            Function::create(&ty, Box::new(wasi_fd_write), 0)?,
-        );
-
-        // `proc_exit`
-        let ty = FuncType::create(vec![ValType::I32], vec![])?;
-        custom_wasi_module.add_func(
-            "proc_exit",
-            Function::create(&ty, Box::new(wasi_proc_exit), 0)?,
-        );
+        custom_wasi_module.init(args, envs, preopened_dirs)?;
 
         Ok(custom_wasi_module)
     }
