@@ -10,6 +10,12 @@
 //! generics of `Function::create_bindings::<I, O>`, wherein the I and O are the `WasmFnIO` traits
 //! base on the inputs and outputs of the real host function.
 //!
+//! To run this example, follow the commands below:
+//!
+//! ```bash
+//! // go into the directory: bindings/rust
+//! cargo run -p wasmedge-sys --example hostfunc2 -- --nocapture
+//! ```
 
 use wasmedge_macro::sys_host_function;
 use wasmedge_sys::{
@@ -83,12 +89,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // create a Vm context
     let config = Config::create().expect("fail to create Config instance");
-    let mut vm = Vm::create(Some(config), None)?;
-    vm.register_wasm_from_import(ImportObject::Import(import))?;
+    let mut vm = Vm::create(Some(config))?;
+    vm.register_instance_from_import(ImportObject::Import(import))?;
 
     let add_ref = WasmValue::from_extern_ref(&mut real_add);
     match vm.run_wasm_from_module(
-        module,
+        &module,
         "call_add",
         [
             add_ref,
