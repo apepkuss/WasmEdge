@@ -541,9 +541,9 @@ fn wasi_args_get(cf: CallingFrame, args: Vec<WasmValue>) -> Result<Vec<WasmValue
     for iov in args_vec.iter() {
         unsafe {
             args_buf_mut_ptr.copy_from(iov.buf, iov.buf_len);
-            args_buf_mut_ptr = args_buf_mut_ptr.add(iov.buf_len);
+            args_buf_mut_ptr = args_buf_mut_ptr.add(iov.buf_len + 1); // +1 for null terminator
 
-            args_mut_ptr.copy_from(iov.buf_len.to_le_bytes().as_ptr(), 4);
+            args_mut_ptr.copy_from((iov.buf_len + 1).to_le_bytes().as_ptr(), 4);
             args_mut_ptr = args_mut_ptr.add(4);
         }
     }
@@ -614,9 +614,9 @@ fn wasi_environ_get(
     for iov in envs_vec.iter() {
         unsafe {
             environ_buf_mut_ptr.copy_from(iov.buf, iov.buf_len);
-            environ_buf_mut_ptr = environ_buf_mut_ptr.add(iov.buf_len);
+            environ_buf_mut_ptr = environ_buf_mut_ptr.add(iov.buf_len + 1); // +1 for null terminator
 
-            environ_mut_ptr.copy_from(iov.buf_len.to_le_bytes().as_ptr(), 4);
+            environ_mut_ptr.copy_from((iov.buf_len + 1).to_le_bytes().as_ptr(), 4);
             environ_mut_ptr = environ_mut_ptr.add(4);
         }
     }
@@ -723,8 +723,7 @@ fn test_wasi_args_sizes_get() -> Result<(), Box<dyn std::error::Error>> {
 
     // create a CustomWasiModule
     let args = vec!["arg1", "arg2"];
-    let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
-    let mut import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+    let mut import_custom_wasi = CustomWasiModule::create(Some(args), None, None)?;
 
     // add a custom memory
     let mem_ty = MemType::create(1, None, false)?;
@@ -815,8 +814,7 @@ fn test_wasi_args_get() -> Result<(), Box<dyn std::error::Error>> {
 
     // create a CustomWasiModule
     let args = vec!["arg1", "arg2"];
-    let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
-    let mut import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+    let mut import_custom_wasi = CustomWasiModule::create(Some(args), None, None)?;
 
     // add a custom memory
     let mem_ty = MemType::create(1, None, false)?;
@@ -828,11 +826,33 @@ fn test_wasi_args_get() -> Result<(), Box<dyn std::error::Error>> {
 
     let custom_wasi_module = vm.custom_wasi_module()?;
 
+    // run `args_sizes_get` to get the number of arguments
+    let n_args = {
+        let fn_args_sizes_get = custom_wasi_module.get_func("args_sizes_get")?;
+        let returns = vm.run_func(
+            &fn_args_sizes_get,
+            [WasmValue::from_i32(0), WasmValue::from_i32(4)],
+        )?;
+        assert_eq!(returns[0].to_i32(), 0);
+        // get the result from the linear memory
+        let memory = custom_wasi_module.get_memory("memory")?;
+        // get args_size
+        let data = memory.get_data(0, 4)?;
+        let args_size = i32::from_le_bytes(data.try_into().unwrap());
+        assert_eq!(args_size, 2);
+        args_size
+    };
+
     // run `args_get`
     let fn_args_get = custom_wasi_module.get_func("args_get")?;
+    let args_size_buf_offset = 0i32;
+    let args_buf_offset = args_size_buf_offset + n_args * std::mem::size_of::<u32>() as i32;
     let result = vm.run_func(
         &fn_args_get,
-        [WasmValue::from_i32(0), WasmValue::from_i32(8)],
+        [
+            WasmValue::from_i32(args_size_buf_offset),
+            WasmValue::from_i32(args_buf_offset),
+        ],
     );
     assert!(result.is_ok());
     let returns = result.unwrap();
@@ -841,18 +861,35 @@ fn test_wasi_args_get() -> Result<(), Box<dyn std::error::Error>> {
     // get the result from the linear memory
     let memory = custom_wasi_module.get_memory("memory")?;
     // get args_size
-    let offset_vec = memory.get_data(0, 8)?;
-    let arg1_buf_size = u32::from_le_bytes(offset_vec[0..4].try_into().unwrap());
-    dbg!(arg1_buf_size);
-    let arg2_buf_size = u32::from_le_bytes(offset_vec[4..8].try_into().unwrap());
-    dbg!(arg2_buf_size);
-    // get args_buf_size
-    let data = memory.get_data(8, arg1_buf_size)?;
+    let mut curr_arg_size_buf_offset = args_size_buf_offset as usize;
+    let arg_size_buf_size = n_args as u32 * std::mem::size_of::<u32>() as u32;
+    let offset_vec = memory.get_data(curr_arg_size_buf_offset as u32, arg_size_buf_size)?;
+    let step = std::mem::size_of::<u32>();
+    // get the size of the first argument
+    let arg1_buf_size = u32::from_le_bytes(
+        offset_vec[curr_arg_size_buf_offset..(curr_arg_size_buf_offset + step)]
+            .try_into()
+            .unwrap(),
+    );
+    // get the size of the second argument
+    curr_arg_size_buf_offset += step;
+    let arg2_buf_size = u32::from_le_bytes(
+        offset_vec[curr_arg_size_buf_offset..(curr_arg_size_buf_offset + step)]
+            .try_into()
+            .unwrap(),
+    );
+
+    // get the first argument
+    let mut curr_args_buf_offset = args_buf_offset as u32;
+    let data = memory.get_data(curr_args_buf_offset, arg1_buf_size)?;
     let argument = std::str::from_utf8(&data)?;
-    assert_eq!(argument, "arg1");
-    let data = memory.get_data(8 + arg1_buf_size, arg2_buf_size)?;
+    assert_eq!(argument, "arg1\0");
+
+    // get the second argument
+    curr_args_buf_offset += arg1_buf_size;
+    let data = memory.get_data(curr_args_buf_offset, arg2_buf_size)?;
     let argument = std::str::from_utf8(&data)?;
-    assert_eq!(argument, "arg2");
+    assert_eq!(argument, "arg2\0");
 
     Ok(())
 }
@@ -865,10 +902,8 @@ fn test_wasi_environ_get() -> Result<(), Box<dyn std::error::Error>> {
     let mut vm = NewVm::create(None)?;
 
     // create a CustomWasiModule
-    let args = vec!["arg1", "arg2"];
     let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
-    let envs_len = envs.len();
-    let mut import_custom_wasi = CustomWasiModule::create(Some(args), Some(envs), None)?;
+    let mut import_custom_wasi = CustomWasiModule::create(None, Some(envs), None)?;
 
     // add a custom memory
     let mem_ty = MemType::create(1, None, false)?;
@@ -880,15 +915,33 @@ fn test_wasi_environ_get() -> Result<(), Box<dyn std::error::Error>> {
 
     let custom_wasi_module = vm.custom_wasi_module()?;
 
-    // run `args_get`
+    // run `environ_sizes_get` to get the number of arguments
+    let n_envs = {
+        let fn_environ_sizes_get = custom_wasi_module.get_func("environ_sizes_get")?;
+        let returns = vm.run_func(
+            &fn_environ_sizes_get,
+            [WasmValue::from_i32(0), WasmValue::from_i32(4)],
+        )?;
+        assert_eq!(returns[0].to_i32(), 0);
+
+        // get the result from the linear memory
+        let memory = custom_wasi_module.get_memory("memory")?;
+        // get environ_size
+        let data = memory.get_data(0, 4)?;
+        let environ_size = i32::from_le_bytes(data.try_into().unwrap());
+        assert_eq!(environ_size, 3);
+        environ_size
+    };
+
+    // run `environ_get`
     let fn_environ_get = custom_wasi_module.get_func("environ_get")?;
-    let data_buf_size_offset = 0;
-    let data_offset = envs_len as i32 * 4;
+    let data_size_buf_offset = 0;
+    let data_buf_offset = data_size_buf_offset + n_envs * std::mem::size_of::<u32>() as i32;
     let result = vm.run_func(
         &fn_environ_get,
         [
-            WasmValue::from_i32(data_buf_size_offset),
-            WasmValue::from_i32(data_offset),
+            WasmValue::from_i32(data_size_buf_offset),
+            WasmValue::from_i32(data_buf_offset),
         ],
     );
     assert!(result.is_ok());
@@ -898,23 +951,44 @@ fn test_wasi_environ_get() -> Result<(), Box<dyn std::error::Error>> {
     // get the result from the linear memory
     let memory = custom_wasi_module.get_memory("memory")?;
     // get args_size
-    let offset_vec = memory.get_data(data_buf_size_offset as u32, data_offset as u32)?;
-    let env1_buf_size = u32::from_le_bytes(offset_vec[0..4].try_into().unwrap());
-    let env2_buf_size = u32::from_le_bytes(offset_vec[4..8].try_into().unwrap());
-    let env3_buf_size = u32::from_le_bytes(offset_vec[8..12].try_into().unwrap());
-    // get args_buf_size
-    let mut curr_data_offset = data_offset as u32;
+    let offset_vec = memory.get_data(
+        data_size_buf_offset as u32,
+        n_envs as u32 * std::mem::size_of::<u32>() as u32,
+    )?;
+    // get the size of each environment variable
+    let mut curr_env_size_buf_offset = data_size_buf_offset as usize;
+    let step = std::mem::size_of::<u32>();
+    let env1_buf_size = u32::from_le_bytes(
+        offset_vec[curr_env_size_buf_offset..(curr_env_size_buf_offset + step)]
+            .try_into()
+            .unwrap(),
+    );
+    curr_env_size_buf_offset += step;
+    let env2_buf_size = u32::from_le_bytes(
+        offset_vec[curr_env_size_buf_offset..(curr_env_size_buf_offset + step)]
+            .try_into()
+            .unwrap(),
+    );
+    curr_env_size_buf_offset += step;
+    let env3_buf_size = u32::from_le_bytes(
+        offset_vec[curr_env_size_buf_offset..(curr_env_size_buf_offset + step)]
+            .try_into()
+            .unwrap(),
+    );
+
+    // get each environment variable
+    let mut curr_data_offset = data_buf_offset as u32;
     let data = memory.get_data(curr_data_offset, env1_buf_size)?;
     let argument = std::str::from_utf8(&data)?;
-    assert_eq!(argument, "ENV1=VAL1");
+    assert_eq!(argument, "ENV1=VAL1\0");
     curr_data_offset += env1_buf_size;
     let data = memory.get_data(curr_data_offset, env2_buf_size)?;
     let argument = std::str::from_utf8(&data)?;
-    assert_eq!(argument, "ENV2=VAL2");
+    assert_eq!(argument, "ENV2=VAL2\0");
     curr_data_offset += env2_buf_size;
     let data = memory.get_data(curr_data_offset, env3_buf_size)?;
     let argument = std::str::from_utf8(&data)?;
-    assert_eq!(argument, "ENV3=VAL3");
+    assert_eq!(argument, "ENV3=VAL3\0");
 
     Ok(())
 }
