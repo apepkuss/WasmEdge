@@ -3268,9 +3268,7 @@ mod tests {
     #[allow(clippy::assertions_on_result_states)]
     fn test_instance_find_xxx() {
         let vm = create_vm();
-        let result = vm.store_mut();
-        assert!(result.is_ok());
-        let mut store = result.unwrap();
+        let store = vm.store_mut();
 
         // get the module named "extern"
         let result = store.module("extern_module");
@@ -3341,9 +3339,7 @@ mod tests {
     #[allow(clippy::assertions_on_result_states)]
     fn test_instance_find_names() {
         let vm = create_vm();
-        let result = vm.store_mut();
-        assert!(result.is_ok());
-        let mut store = result.unwrap();
+        let store = vm.store_mut();
 
         // get the module named "extern"
         let result = store.module("extern_module");
@@ -3504,11 +3500,11 @@ mod tests {
         let global = result.unwrap();
         import.add_global("global", global);
 
-        let result = Vm::create(None, None);
+        let result = Vm::create(None);
         assert!(result.is_ok());
         let mut vm = result.unwrap();
 
-        let result = vm.register_wasm_from_import(ImportObject::Import(import));
+        let result = vm.register_instance_from_import(ImportObject::Import(import));
         assert!(result.is_ok());
 
         vm

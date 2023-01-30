@@ -12,15 +12,14 @@ use crate::WasiNnModule;
 use crate::WasmEdgeProcessModule;
 use crate::{
     error::{VmError, WasmEdgeError},
-    executor::{Executor, InnerExecutor},
+    executor::Executor,
     ffi,
-    instance::function::{FuncRef, FuncType, Function, InnerFuncType},
-    loader::{InnerLoader, Loader},
-    statistics::{InnerStat, Statistics},
-    store::{InnerStore, Store},
-    types::WasmEdgeString,
-    utils::{self, check},
-    validator::{InnerValidator, Validator},
+    instance::function::{FuncRef, Function},
+    loader::Loader,
+    statistics::Statistics,
+    store::Store,
+    utils::check,
+    validator::Validator,
     Config, Engine, ImportObject, Instance, Module, WasmEdgeResult, WasmValue,
 };
 #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
@@ -28,10 +27,10 @@ use crate::{
     WasiCrypto, WasiCryptoAsymmetricCommonModule, WasiCryptoCommonModule, WasiCryptoKxModule,
     WasiCryptoSignaturesModule, WasiCryptoSymmetricModule,
 };
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path};
 use wasmedge_types::HostRegistration;
 
-pub struct NewVm {
+pub struct Vm {
     imports: HashMap<String, ImportObject>,
     host_registered_modules: HashMap<HostRegistration, ImportObject>,
     executor: Executor,
@@ -43,7 +42,7 @@ pub struct NewVm {
     named_instances: HashMap<String, Instance>,
     active_instance: Option<Instance>,
 }
-impl NewVm {
+impl Vm {
     /// Creates a new [Vm] to be associated with the given [configuration](crate::Config) and [store](crate::Store).
     ///
     /// # Arguments
@@ -82,7 +81,7 @@ impl NewVm {
 
         if vm.config.wasi_enabled() {
             #[cfg(not(feature = "custom_wasi"))]
-            vm.register_wasm_from_import(ImportObject::Wasi(WasiModule::create(
+            vm.register_instance_from_import(ImportObject::Wasi(WasiModule::create(
                 None, None, None,
             )?))?;
             #[cfg(feature = "custom_wasi")]
@@ -93,7 +92,7 @@ impl NewVm {
 
         #[cfg(target_os = "linux")]
         if vm.config.wasmedge_process_enabled() {
-            vm.register_wasm_from_import(ImportObject::WasmEdgeProcess(
+            vm.register_instance_from_import(ImportObject::WasmEdgeProcess(
                 WasmEdgeProcessModule::create(None, false)?,
             ))?;
         }
@@ -954,12 +953,8 @@ impl NewVm {
         self.store.module(mod_name.as_ref())
     }
 }
-impl Drop for NewVm {
+impl Drop for Vm {
     fn drop(&mut self) {
-        // if Arc::strong_count(&self.inner) == 1 && !self.inner.0.is_null() {
-        //     unsafe { ffi::WasmEdge_VMDelete(self.inner.0) };
-        // }
-
         // drop imports
         self.imports.drain();
 
@@ -967,7 +962,7 @@ impl Drop for NewVm {
         self.host_registered_modules.drain();
     }
 }
-impl Engine for NewVm {
+impl Engine for Vm {
     fn run_func(
         &self,
         func: &Function,
@@ -1046,10 +1041,6 @@ mod tests {
         error::{CoreInstantiationError, HostFuncError},
         AsImport, CallingFrame, FuncType, Function, ImportObject,
     };
-    use std::{
-        sync::{Arc, Mutex},
-        thread,
-    };
     use wasmedge_types::{wat2wasm, ValType};
 
     #[test]
@@ -1061,7 +1052,7 @@ mod tests {
         assert!(!config.wasi_enabled());
 
         // create a Vm context with the given Config and Store
-        let vm = NewVm::create(Some(config))?;
+        let vm = Vm::create(Some(config))?;
 
         #[cfg(feature = "custom_wasi")]
         let result = vm.custom_wasi_module();
@@ -1086,7 +1077,7 @@ mod tests {
         assert!(config.wasi_enabled());
 
         // create a Vm context with the given Config and Store
-        let mut vm = NewVm::create(Some(config))?;
+        let mut vm = Vm::create(Some(config))?;
 
         // create import module
         let mut import = ImportModule::create("extern")?;
@@ -1125,7 +1116,7 @@ mod tests {
         assert!(config.bulk_memory_operations_enabled());
 
         // create a Vm context with the given Config and Store
-        let mut vm = NewVm::create(Some(config))?;
+        let mut vm = Vm::create(Some(config))?;
 
         // register a wasm module from a buffer
         let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
@@ -1143,7 +1134,7 @@ mod tests {
         assert!(config.bulk_memory_operations_enabled());
 
         // create a Vm context with the given Config and Store
-        let mut vm = NewVm::create(Some(config))?;
+        let mut vm = Vm::create(Some(config))?;
 
         // register a wasm module from a buffer
         let wasm_bytes = wat2wasm(
@@ -1197,7 +1188,7 @@ mod tests {
             assert!(config.wasi_enabled());
 
             // create a Vm context with the given Config and Store
-            let mut vm = NewVm::create(Some(config))?;
+            let mut vm = Vm::create(Some(config))?;
 
             // get the default wasi module
             #[cfg(not(feature = "custom_wasi"))]
@@ -1215,7 +1206,7 @@ mod tests {
             let import_wasi = CustomWasiModule::create(None, None, None)?;
 
             #[cfg(not(feature = "custom_wasi"))]
-            let result = vm.register_wasm_from_import(ImportObject::Wasi(import_wasi));
+            let result = vm.register_instance_from_import(ImportObject::Wasi(import_wasi));
             #[cfg(feature = "custom_wasi")]
             let result = vm.register_instance_from_import(ImportObject::CustomWasi(import_wasi));
             assert!(result.is_err());
@@ -1240,7 +1231,7 @@ mod tests {
             assert!(config.bulk_memory_operations_enabled());
 
             // create a Vm context with the given Config and Store
-            let mut vm = NewVm::create(Some(config))?;
+            let mut vm = Vm::create(Some(config))?;
 
             // get the Wasi module
             #[cfg(not(feature = "custom_wasi"))]
@@ -1267,7 +1258,7 @@ mod tests {
             import_wasi.add_func("add", host_func);
 
             #[cfg(not(feature = "custom_wasi"))]
-            let result = vm.register_wasm_from_import(ImportObject::Wasi(import_wasi));
+            let result = vm.register_instance_from_import(ImportObject::Wasi(import_wasi));
             #[cfg(feature = "custom_wasi")]
             let result = vm.register_instance_from_import(ImportObject::CustomWasi(import_wasi));
             assert!(result.is_ok());
@@ -1294,7 +1285,7 @@ mod tests {
             assert!(config.wasmedge_process_enabled());
 
             // create a Vm context with the given Config and Store
-            let mut vm = NewVm::create(Some(config))?;
+            let mut vm = Vm::create(Some(config))?;
 
             // get the WasmEdgeProcess module
             let result = vm.wasmedge_process_module();
@@ -1305,7 +1296,7 @@ mod tests {
             // create a WasmEdgeProcess module
             let import_process = WasmEdgeProcessModule::create(None, false)?;
             let result =
-                vm.register_wasm_from_import(ImportObject::WasmEdgeProcess(import_process));
+                vm.register_instance_from_import(ImportObject::WasmEdgeProcess(import_process));
             assert!(result.is_err());
             assert_eq!(
                 result.unwrap_err(),
@@ -1328,7 +1319,7 @@ mod tests {
             assert!(config.bulk_memory_operations_enabled());
 
             // create a Vm context with the given Config and Store
-            let mut vm = NewVm::create(Some(config))?;
+            let mut vm = Vm::create(Some(config))?;
 
             // get the WasmEdgeProcess module
             let result = vm.wasmedge_process_module();
@@ -1349,7 +1340,7 @@ mod tests {
             import_process.add_func("add", host_func);
 
             let result =
-                vm.register_wasm_from_import(ImportObject::WasmEdgeProcess(import_process));
+                vm.register_instance_from_import(ImportObject::WasmEdgeProcess(import_process));
             assert!(result.is_ok());
         }
 
@@ -1364,7 +1355,7 @@ mod tests {
         assert!(config.bulk_memory_operations_enabled());
 
         // create a Vm context with the given Config
-        let result = NewVm::create(Some(config));
+        let result = Vm::create(Some(config));
         assert!(result.is_ok());
         let mut vm = result.unwrap();
 
@@ -1427,7 +1418,7 @@ mod tests {
         assert!(config.bulk_memory_operations_enabled());
 
         // create a Vm context with the given Config and Store
-        let mut vm = NewVm::create(Some(config))?;
+        let mut vm = Vm::create(Some(config))?;
 
         // run a function from a in-memory wasm bytes
         let wasm_bytes = wat2wasm(
@@ -1521,7 +1512,7 @@ mod tests {
         assert!(config.bulk_memory_operations_enabled());
 
         // create a Vm context with the given Config and Store
-        let result = NewVm::create(Some(config));
+        let result = Vm::create(Some(config));
         assert!(result.is_ok());
         let mut vm = result.unwrap();
 
@@ -1593,7 +1584,7 @@ mod tests {
         assert!(config.bulk_memory_operations_enabled());
 
         // create a Vm context with the given Config and Store
-        let result = NewVm::create(Some(config));
+        let result = Vm::create(Some(config));
         assert!(result.is_ok());
         let mut vm = result.unwrap();
 

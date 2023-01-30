@@ -629,11 +629,11 @@ fn wasi_environ_get(
 #[test]
 #[cfg(feature = "custom_wasi")]
 fn test_import_custom_wasi() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::{vm_new::NewVm, Engine, ImportObject};
+    use crate::{vm_new::Vm, Engine, ImportObject};
     use std::mem::MaybeUninit;
     use wasmedge_wasi_common::{Ciovec, CiovecArray};
 
-    let mut vm = NewVm::create(None)?;
+    let mut vm = Vm::create(None)?;
 
     // create a CustomWasiModule
     let args = vec!["arg1", "arg2"];
@@ -717,9 +717,9 @@ fn test_import_custom_wasi() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 #[cfg(feature = "custom_wasi")]
 fn test_wasi_args_sizes_get() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+    use crate::{vm_new::Vm, AsImport, Engine, ImportObject, MemType, Memory};
 
-    let mut vm = NewVm::create(None)?;
+    let mut vm = Vm::create(None)?;
 
     // create a CustomWasiModule
     let args = vec!["arg1", "arg2"];
@@ -762,9 +762,9 @@ fn test_wasi_args_sizes_get() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 #[cfg(feature = "custom_wasi")]
 fn test_wasi_environ_sizes_get() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+    use crate::{vm_new::Vm, AsImport, Engine, ImportObject, MemType, Memory};
 
-    let mut vm = NewVm::create(None)?;
+    let mut vm = Vm::create(None)?;
 
     // create a CustomWasiModule
     let args = vec!["arg1", "arg2"];
@@ -808,9 +808,9 @@ fn test_wasi_environ_sizes_get() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 #[cfg(feature = "custom_wasi")]
 fn test_wasi_args_get() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+    use crate::{vm_new::Vm, AsImport, Engine, ImportObject, MemType, Memory};
 
-    let mut vm = NewVm::create(None)?;
+    let mut vm = Vm::create(None)?;
 
     // create a CustomWasiModule
     let args = vec!["arg1", "arg2"];
@@ -897,9 +897,9 @@ fn test_wasi_args_get() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 #[cfg(feature = "custom_wasi")]
 fn test_wasi_environ_get() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+    use crate::{vm_new::Vm, AsImport, Engine, ImportObject, MemType, Memory};
 
-    let mut vm = NewVm::create(None)?;
+    let mut vm = Vm::create(None)?;
 
     // create a CustomWasiModule
     let envs = vec![("ENV1", "VAL1"), ("ENV2", "VAL2"), ("ENV3", "VAL3")];
@@ -996,9 +996,9 @@ fn test_wasi_environ_get() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 #[cfg(feature = "custom_wasi")]
 fn test_wasi_fd_write() -> Result<(), Box<dyn std::error::Error>> {
-    use crate::{vm_new::NewVm, AsImport, Engine, ImportObject, MemType, Memory};
+    use crate::{vm_new::Vm, AsImport, Engine, ImportObject, MemType, Memory};
 
-    let mut vm = NewVm::create(None)?;
+    let mut vm = Vm::create(None)?;
 
     // create a CustomWasiModule
     let args = vec!["arg1", "arg2"];
