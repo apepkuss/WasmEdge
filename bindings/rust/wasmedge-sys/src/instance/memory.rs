@@ -78,22 +78,22 @@ impl Memory {
     ///
     /// * `offset` - The data start offset in the [Memory].
     ///
-    /// * `len` - The requested data length.
+    /// * `size` - The requested data size in bytes.
     ///
     /// # Errors
     ///
     /// If the `offset + len` is larger than the data size in the [Memory], then an error is returned.
     ///
-    pub fn get_data(&self, offset: u32, len: u32) -> WasmEdgeResult<Vec<u8>> {
-        let mut data = Vec::with_capacity(len as usize);
+    pub fn get_data(&self, offset: u32, size: u32) -> WasmEdgeResult<Vec<u8>> {
+        let mut data = Vec::with_capacity(size as usize);
         unsafe {
             check(ffi::WasmEdge_MemoryInstanceGetData(
                 self.inner.0,
                 data.as_mut_ptr(),
                 offset,
-                len,
+                size,
             ))?;
-            data.set_len(len as usize);
+            data.set_len(size as usize);
         }
 
         Ok(data.into_iter().collect())
@@ -163,7 +163,7 @@ impl Memory {
     ///
     /// * `offset` - The data start offset in the [Memory].
     ///
-    /// * `len` - The requested data length. If the size of `offset` + `len` is larger
+    /// * `size` - The requested data size in bytes. If the size of `offset` + `size` is larger
     /// than the data size in the [Memory]
     ///
     ///
@@ -171,8 +171,9 @@ impl Memory {
     ///
     /// If fail to get the data pointer, then an error is returned.
     ///
-    pub fn data_pointer(&self, offset: u32, len: u32) -> WasmEdgeResult<*const u8> {
-        let ptr = unsafe { ffi::WasmEdge_MemoryInstanceGetPointerConst(self.inner.0, offset, len) };
+    pub fn data_pointer(&self, offset: u32, size: u32) -> WasmEdgeResult<*const u8> {
+        let ptr =
+            unsafe { ffi::WasmEdge_MemoryInstanceGetPointerConst(self.inner.0, offset, size) };
         match ptr.is_null() {
             true => Err(Box::new(WasmEdgeError::Mem(MemError::ConstPtr))),
             false => Ok(ptr),
@@ -185,21 +186,21 @@ impl Memory {
     ///
     /// * `offset` - The data start offset in the [Memory].
     ///
-    /// * `len` - The requested data length. If the size of `offset` + `len` is larger than the data size in the [Memory]
+    /// * `size` - The requested data size in bytes. If the size of `offset` + `size` is larger than the data size in the [Memory]
     ///
     /// # Errors
     ///
     /// If fail to get the data pointer, then an error is returned.
     ///
-    pub fn data_pointer_mut(&mut self, offset: u32, len: u32) -> WasmEdgeResult<*mut u8> {
-        let ptr = unsafe { ffi::WasmEdge_MemoryInstanceGetPointer(self.inner.0, offset, len) };
+    pub fn data_pointer_mut(&mut self, offset: u32, size: u32) -> WasmEdgeResult<*mut u8> {
+        let ptr = unsafe { ffi::WasmEdge_MemoryInstanceGetPointer(self.inner.0, offset, size) };
         match ptr.is_null() {
             true => Err(Box::new(WasmEdgeError::Mem(MemError::MutPtr))),
             false => Ok(ptr),
         }
     }
 
-    /// Returns the size, in WebAssembly pages (64 KiB of each page), of this wasm memory.
+    /// Returns the number of WebAssembly pages (64 KiB of each page) of this wasm memory.
     pub fn size(&self) -> u32 {
         unsafe { ffi::WasmEdge_MemoryInstanceGetPageSize(self.inner.0) }
     }
