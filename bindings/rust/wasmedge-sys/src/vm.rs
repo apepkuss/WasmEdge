@@ -1481,8 +1481,6 @@ mod tests {
         let mut config = result.unwrap();
         config.bulk_memory_operations(true);
         assert!(config.bulk_memory_operations_enabled());
-        config.interruptible(true);
-        assert!(config.interruptible_enabled());
 
         // create a Vm context with the given Config and Store
         let result = Vm::create(Some(config), None);
@@ -1657,8 +1655,6 @@ mod tests {
         let mut config = result.unwrap();
         config.bulk_memory_operations(true);
         assert!(config.bulk_memory_operations_enabled());
-        config.interruptible(true);
-        assert!(config.interruptible_enabled());
 
         // create a Vm context with the given Config and Store
         let result = Vm::create(Some(config), None);
@@ -1825,8 +1821,6 @@ mod tests {
         let mut config = result.unwrap();
         config.bulk_memory_operations(true);
         assert!(config.bulk_memory_operations_enabled());
-        config.interruptible(true);
-        assert!(config.interruptible_enabled());
 
         // create a Vm context with the given Config and Store
         let result = Vm::create(Some(config), None);
