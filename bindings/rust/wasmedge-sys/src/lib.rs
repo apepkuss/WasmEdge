@@ -230,7 +230,8 @@ pub use types::WasmValue;
 #[doc(inline)]
 pub use validator::Validator;
 #[doc(inline)]
-pub use vm::Vm;
+// pub use vm::Vm;
+pub use vm_new::Vm;
 use wasmedge_types::{error, WasmEdgeResult};
 
 /// Type alias for a boxed native function. This type is used in thread-safe cases.
