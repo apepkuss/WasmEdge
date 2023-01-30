@@ -746,12 +746,25 @@ impl NewVm {
         // register active instance
         self.register_active_instance_from_module(&module)?;
 
-        let func = self
-            .active_instance()
-            .unwrap()
-            .get_func(func_name.as_ref())?;
+        // run function
+        self.run_function(func_name.as_ref(), params)
+    }
 
-        self.executor.run_func(&func, params)
+    #[cfg(feature = "async")]
+    pub async fn run_wasm_from_module_async(
+        &mut self,
+        module: &Module,
+        func_name: impl AsRef<str> + Send,
+        params: impl IntoIterator<Item = WasmValue> + Send,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        // validate module
+        self.validator.validate(&module)?;
+
+        // register active instance
+        self.register_active_instance_from_module(&module)?;
+
+        // run function
+        self.run_function_async(func_name, params).await
     }
 
     /// Runs a [function](crate::Function) defined in a WASM file.
@@ -787,6 +800,20 @@ impl NewVm {
         self.run_wasm_from_module(&ast_module, func_name.as_ref(), params)
     }
 
+    #[cfg(feature = "async")]
+    pub async fn run_wasm_from_file_async(
+        &mut self,
+        file: impl AsRef<Path>,
+        func_name: impl AsRef<str>,
+        params: impl IntoIterator<Item = WasmValue> + Send,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        // load module from file
+        let ast_module = self.loader.from_file(file.as_ref())?;
+
+        self.run_wasm_from_module_async(&ast_module, func_name.as_ref(), params)
+            .await
+    }
+
     /// Runs a [function](crate::Function) from a in-memory wasm bytes.
     ///
     /// The workflow of the function can be summarized as the following steps:
@@ -818,6 +845,20 @@ impl NewVm {
         self.run_wasm_from_module(&ast_module, func_name.as_ref(), params)
     }
 
+    #[cfg(feature = "async")]
+    pub async fn run_wasm_from_bytes_async(
+        &mut self,
+        bytes: impl AsRef<[u8]>,
+        func_name: impl AsRef<str>,
+        params: impl IntoIterator<Item = WasmValue> + Send,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        // load module from bytes
+        let ast_module = self.loader.from_bytes(bytes.as_ref())?;
+
+        self.run_wasm_from_module_async(&ast_module, func_name.as_ref(), params)
+            .await
+    }
+
     /// Runs an exported WASM function by name. The WASM function is hosted by the anonymous [module](crate::Module) in
     /// the [store](crate::Store) of the [Vm].
     ///
@@ -844,6 +885,17 @@ impl NewVm {
             }
             None => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundActiveModule))),
         }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn run_function_async(
+        &mut self,
+        func_name: impl AsRef<str> + Send,
+        params: impl IntoIterator<Item = WasmValue> + Send,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        FiberFuture::on_fiber(|| self.run_function(func_name, params))
+            .await
+            .unwrap()
     }
 
     /// Runs an exported WASM function by its name and the module's name in which the WASM function is hosted.
@@ -875,6 +927,18 @@ impl NewVm {
 
         // run the function
         self.executor().run_func(&func, params)
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn run_registered_function_async(
+        &mut self,
+        mod_name: impl AsRef<str> + Send,
+        func_name: impl AsRef<str> + Send,
+        params: impl IntoIterator<Item = WasmValue> + Send,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        FiberFuture::on_fiber(|| self.run_registered_function(mod_name, func_name, params))
+            .await
+            .unwrap()
     }
 
     /// Returns the active (also called anonymous) module instance.
@@ -1444,6 +1508,184 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_vm_new_run_wasm_from_file_async() {
+        // create a Config context
+        let result = Config::create();
+        assert!(result.is_ok());
+        let mut config = result.unwrap();
+        config.bulk_memory_operations(true);
+        assert!(config.bulk_memory_operations_enabled());
+
+        // create a Vm context with the given Config and Store
+        let result = NewVm::create(Some(config));
+        assert!(result.is_ok());
+        let mut vm = result.unwrap();
+
+        // run a function from a wasm file
+        let path = std::path::PathBuf::from(env!("WASMEDGE_DIR"))
+            .join("bindings/rust/wasmedge-sys/tests/data/fibonacci.wat");
+        let result = vm
+            .run_wasm_from_file_async(&path, "fib", [WasmValue::from_i32(5)])
+            .await;
+        assert!(result.is_ok());
+        let returns = result.unwrap();
+        assert_eq!(returns[0].to_i32(), 8);
+
+        // run a function from a non-existent file
+        let result = vm
+            .run_wasm_from_file_async("no_file", "fib", [WasmValue::from_i32(5)])
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Core(CoreError::Load(
+                CoreLoadError::IllegalPath
+            )))
+        );
+
+        // run a function from a WASM file with the empty parameters
+        let result = vm.run_wasm_from_file_async(&path, "fib", []).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Core(CoreError::Execution(
+                CoreExecutionError::FuncTypeMismatch
+            )))
+        );
+
+        // run a function from a WASM file with the parameters of wrong type
+        let result = vm
+            .run_wasm_from_file_async(&path, "fib", [WasmValue::from_i64(5)])
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Core(CoreError::Execution(
+                CoreExecutionError::FuncTypeMismatch
+            )))
+        );
+
+        // fun a function: the specified function name is non-existent
+        let result = vm
+            .run_wasm_from_file_async(&path, "fib2", [WasmValue::from_i32(5)])
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Instance(InstanceError::NotFoundFunc(
+                "fib2".to_string()
+            )))
+        );
+    }
+
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_vm_new_run_wasm_from_bytes_async() {
+        // create a Config context
+        let result = Config::create();
+        assert!(result.is_ok());
+        let mut config = result.unwrap();
+        config.bulk_memory_operations(true);
+        assert!(config.bulk_memory_operations_enabled());
+
+        // create a Vm context with the given Config and Store
+        let result = NewVm::create(Some(config));
+        assert!(result.is_ok());
+        let mut vm = result.unwrap();
+
+        // run a function from a in-memory wasm bytes
+        let result = wat2wasm(
+            br#"(module
+            (export "fib" (func $fib))
+            (func $fib (param $n i32) (result i32)
+             (if
+              (i32.lt_s
+               (get_local $n)
+               (i32.const 2)
+              )
+              (return
+               (i32.const 1)
+              )
+             )
+             (return
+              (i32.add
+               (call $fib
+                (i32.sub
+                 (get_local $n)
+                 (i32.const 2)
+                )
+               )
+               (call $fib
+                (i32.sub
+                 (get_local $n)
+                 (i32.const 1)
+                )
+               )
+              )
+             )
+            )
+           )
+        "#,
+        );
+        assert!(result.is_ok());
+        let wasm_bytes = result.unwrap();
+        let result = vm
+            .run_wasm_from_bytes_async(&wasm_bytes, "fib", [WasmValue::from_i32(5)])
+            .await;
+        assert!(result.is_ok());
+        let returns = result.unwrap();
+        assert_eq!(returns[0].to_i32(), 8);
+
+        // run a function from an empty buffer
+        let empty_buffer: Vec<u8> = Vec::new();
+        let result = vm
+            .run_wasm_from_bytes_async(&empty_buffer, "fib", [WasmValue::from_i32(5)])
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Core(CoreError::Load(
+                CoreLoadError::UnexpectedEnd
+            )))
+        );
+
+        // run a function with the empty parameters
+        let result = vm.run_wasm_from_bytes_async(&wasm_bytes, "fib", []).await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Core(CoreError::Execution(
+                CoreExecutionError::FuncTypeMismatch
+            )))
+        );
+
+        // run a function with the parameters of wrong type
+        let result = vm
+            .run_wasm_from_bytes_async(&wasm_bytes, "fib", [WasmValue::from_i64(5)])
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Core(CoreError::Execution(
+                CoreExecutionError::FuncTypeMismatch
+            )))
+        );
+
+        // fun a function: the specified function name is non-existent
+        let result = vm
+            .run_wasm_from_bytes_async(&wasm_bytes, "fib2", [WasmValue::from_i64(5)])
+            .await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            Box::new(WasmEdgeError::Instance(InstanceError::NotFoundFunc(
+                "fib2".to_string()
+            )))
+        );
     }
 
     fn real_add(_: CallingFrame, inputs: Vec<WasmValue>) -> Result<Vec<WasmValue>, HostFuncError> {
