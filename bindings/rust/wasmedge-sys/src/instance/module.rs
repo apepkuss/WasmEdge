@@ -3267,7 +3267,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_result_states)]
     fn test_instance_find_xxx() {
-        let vm = create_vm();
+        let mut vm = create_vm();
         let store = vm.store_mut();
 
         // get the module named "extern"
@@ -3338,7 +3338,7 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_result_states)]
     fn test_instance_find_names() {
-        let vm = create_vm();
+        let mut vm = create_vm();
         let store = vm.store_mut();
 
         // get the module named "extern"
