@@ -7,8 +7,29 @@
 #include "host/wasi/wasimodule.h"
 #include "plugin/plugin.h"
 
+#include "host/mock/wasi_crypto_module.h"
+#include "host/mock/wasi_nn_module.h"
+#include "host/mock/wasmedge_httpsreq_module.h"
+#include "host/mock/wasmedge_process_module.h"
+
 namespace WasmEdge {
 namespace VM {
+
+namespace {
+template <typename T>
+std::unique_ptr<Runtime::Instance::ModuleInstance>
+createPluginModule(std::string_view PName, std::string_view MName) {
+  using namespace std::literals::string_view_literals;
+  if (const auto *Plugin = Plugin::Plugin::find(PName)) {
+    if (const auto *Module = Plugin->findModule(MName)) {
+      return Module->create();
+    }
+  }
+  spdlog::debug("Plugin: "sv, PName, " , module name: "sv, MName,
+                "not found. Mock instead."sv);
+  return std::make_unique<T>();
+}
+} // namespace
 
 VM::VM(const Configure &Conf)
     : Conf(Conf), Stage(VMStage::Inited),
@@ -27,63 +48,67 @@ VM::VM(const Configure &Conf, Runtime::StoreManager &S)
 
 void VM::unsafeInitVM() {
   using namespace std::literals::string_view_literals;
-  // Create import modules from configuration.
+  // Create WASI host modules from configuration.
+  // TODO: This will be extended for the versionlized WASI in the future.
   if (Conf.hasHostRegistration(HostRegistration::Wasi)) {
     std::unique_ptr<Runtime::Instance::ModuleInstance> WasiMod =
         std::make_unique<Host::WasiModule>();
-    ExecutorEngine.registerModule(StoreRef, *WasiMod.get());
-    ImpObjs.insert({HostRegistration::Wasi, std::move(WasiMod)});
+    HostRegModInst.insert({HostRegistration::Wasi, std::move(WasiMod)});
   }
 
-  // Load the plugins.
-  auto loadPlugin = [=](std::string_view PName, HostRegistration Host,
-                        std::string_view MName) {
-    if (Conf.hasHostRegistration(Host)) {
-      bool Founded = false;
-      if (const auto *Plugin = Plugin::Plugin::find(PName)) {
-        if (const auto *Module = Plugin->findModule(MName)) {
-          auto ProcMod = Module->create();
-          ExecutorEngine.registerModule(StoreRef, *ProcMod);
-          ImpObjs.emplace(Host, std::move(ProcMod));
-          Founded = true;
-        }
-      }
-      if (!Founded) {
-        spdlog::debug("Plugin:"sv, PName, "module: "sv, MName,
-                      "not founded."sv);
-      }
-    }
-  };
-  loadPlugin("wasmedge_process"sv, HostRegistration::WasmEdge_Process,
-             "wasmedge_process"sv);
-  loadPlugin("wasi_nn"sv, HostRegistration::WasiNN, "wasi_nn"sv);
-  loadPlugin("wasi_crypto"sv, HostRegistration::WasiCrypto_Common,
-             "wasi_crypto_common"sv);
-  loadPlugin("wasi_crypto"sv, HostRegistration::WasiCrypto_AsymmetricCommon,
-             "wasi_crypto_asymmetric_common"sv);
-  loadPlugin("wasi_crypto"sv, HostRegistration::WasiCrypto_Kx,
-             "wasi_crypto_kx"sv);
-  loadPlugin("wasi_crypto"sv, HostRegistration::WasiCrypto_Signatures,
-             "wasi_crypto_signatures"sv);
-  loadPlugin("wasi_crypto"sv, HostRegistration::WasiCrypto_Symmetric,
-             "wasi_crypto_symmetric"sv);
+  // Load the plugins and mock them if not found.
+  PreRegModInst.push_back(
+      createPluginModule<Host::WasiNNModuleMock>("wasi_nn"sv, "wasi_nn"sv));
+  PreRegModInst.push_back(createPluginModule<Host::WasiCryptoCommonModuleMock>(
+      "wasi_crypto"sv, "wasi_crypto_common"sv));
+  PreRegModInst.push_back(
+      createPluginModule<Host::WasiCryptoAsymmetricCommonModuleMock>(
+          "wasi_crypto"sv, "wasi_crypto_asymmetric_common"sv));
+  PreRegModInst.push_back(createPluginModule<Host::WasiCryptoKxModuleMock>(
+      "wasi_crypto"sv, "wasi_crypto_kx"sv));
+  PreRegModInst.push_back(
+      createPluginModule<Host::WasiCryptoSignaturesModuleMock>(
+          "wasi_crypto"sv, "wasi_crypto_signatures"sv));
+  PreRegModInst.push_back(
+      createPluginModule<Host::WasiCryptoSymmetricModuleMock>(
+          "wasi_crypto"sv, "wasi_crypto_symmetric"sv));
+  PreRegModInst.push_back(createPluginModule<Host::WasmEdgeProcessModuleMock>(
+      "wasmedge_process"sv, "wasmedge_process"sv));
+  PreRegModInst.push_back(createPluginModule<Host::WasmEdgeHttpsReqModuleMock>(
+      "wasmedge_httpsreq"sv, "wasmedge_httpsreq"sv));
 
-  uint8_t Index = static_cast<uint8_t>(HostRegistration::Max);
+  // Load the other non-official plugins.
   for (const auto &Plugin : Plugin::Plugin::plugins()) {
     if (Conf.isForbiddenPlugins(Plugin.name())) {
       continue;
     }
-    // skip WasmEdge_Process, wasi_nn, and wasi_crypto.
-    if (Plugin.name() == "wasmedge_process"sv || Plugin.name() == "wasi_nn"sv ||
-        Plugin.name() == "wasi_crypto"sv) {
+    // Skip WasmEdge_Process, WasmEdge_HttpsReq, wasi_nn, and wasi_crypto.
+    if (Plugin.name() == "wasmedge_process"sv ||
+        Plugin.name() == "wasmedge_httpsreq"sv ||
+        Plugin.name() == "wasi_nn"sv || Plugin.name() == "wasi_crypto"sv) {
       continue;
     }
     for (const auto &Module : Plugin.modules()) {
-      auto ModObj = Module.create();
-      ExecutorEngine.registerModule(StoreRef, *ModObj);
-      ImpObjs.emplace(static_cast<HostRegistration>(Index++),
-                      std::move(ModObj));
+      PreRegModInst.push_back(Module.create());
     }
+  }
+
+  // Register all module instances.
+  unsafePreregisterHosts();
+  unsafePreregisterPlugins();
+}
+
+void VM::unsafePreregisterHosts() {
+  // Register all created WASI host modules.
+  for (auto &It : HostRegModInst) {
+    ExecutorEngine.registerModule(StoreRef, *(It.second.get()));
+  }
+}
+
+void VM::unsafePreregisterPlugins() {
+  // Register all created module instances from plugins.
+  for (auto &It : PreRegModInst) {
+    ExecutorEngine.registerModule(StoreRef, *(It.get()));
   }
 }
 
@@ -394,7 +419,11 @@ VM::asyncExecute(std::string_view ModName, std::string_view Func,
 void VM::unsafeCleanup() {
   Mod.reset();
   ActiveModInst.reset();
+  StoreRef.reset();
+  RegModInst.clear();
   Stat.clear();
+  unsafePreregisterHosts();
+  unsafePreregisterPlugins();
   Stage = VMStage::Inited;
 }
 
@@ -415,7 +444,7 @@ VM::unsafeGetFunctionList() const {
 
 Runtime::Instance::ModuleInstance *
 VM::unsafeGetImportModule(const HostRegistration Type) const {
-  if (auto Iter = ImpObjs.find(Type); Iter != ImpObjs.cend()) {
+  if (auto Iter = HostRegModInst.find(Type); Iter != HostRegModInst.cend()) {
     return Iter->second.get();
   }
   return nullptr;

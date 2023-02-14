@@ -26,11 +26,11 @@
 #include "runtime/storemgr.h"
 
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -180,7 +180,7 @@ public:
     return unsafeGetFunctionList();
   }
 
-  /// Get import objects by configurations.
+  /// Get pre-registered module instance by configuration.
   Runtime::Instance::ModuleInstance *
   getImportModule(const HostRegistration Type) const {
     std::shared_lock Lock(Mutex);
@@ -264,6 +264,8 @@ private:
   enum class VMStage : uint8_t { Inited, Loaded, Validated, Instantiated };
 
   void unsafeInitVM();
+  void unsafePreregisterHosts();
+  void unsafePreregisterPlugins();
 
   /// Helper function for execution.
   Expect<std::vector<std::pair<ValVariant, ValType>>>
@@ -271,25 +273,40 @@ private:
                 std::string_view Func, Span<const ValVariant> Params = {},
                 Span<const ValType> ParamTypes = {});
 
-  /// VM environment.
+  /// \name VM environment.
+  /// @{
   const Configure Conf;
   Statistics::Statistics Stat;
   VMStage Stage;
   mutable std::shared_mutex Mutex;
+  /// @}
 
-  /// VM components.
+  /// \name VM components.
+  /// @{
   Loader::Loader LoaderEngine;
   Validator::Validator ValidatorEngine;
   Executor::Executor ExecutorEngine;
+  /// @}
 
-  /// VM Storage.
+  /// \name VM Storage.
+  /// @{
+  /// Loaded AST module.
   std::unique_ptr<AST::Module> Mod;
+  /// Active module instance.
   std::unique_ptr<Runtime::Instance::ModuleInstance> ActiveModInst;
+  /// Registered module instances.
   std::vector<std::unique_ptr<Runtime::Instance::ModuleInstance>> RegModInst;
+  /// Pre-registered module instances mapped to the configurations. For WASI.
+  std::unordered_map<HostRegistration,
+                     std::unique_ptr<Runtime::Instance::ModuleInstance>>
+      HostRegModInst;
+  /// Loaded and pre-registered module instances from plug-ins.
+  std::vector<std::unique_ptr<Runtime::Instance::ModuleInstance>> PreRegModInst;
+  /// Self-owned store (nullptr if an outside store is assigned in constructor).
   std::unique_ptr<Runtime::StoreManager> Store;
+  /// Reference to the store.
   Runtime::StoreManager &StoreRef;
-  std::map<HostRegistration, std::unique_ptr<Runtime::Instance::ModuleInstance>>
-      ImpObjs;
+  /// @}
 };
 
 } // namespace VM
