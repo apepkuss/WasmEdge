@@ -873,7 +873,7 @@ impl Vm {
     /// Notice that this function is only available when a [config](crate::Config) with the enabled [wasi](crate::Config::wasi) option is used in the creation of this [Vm].
     pub fn wasi_module_mut(&mut self) -> WasmEdgeResult<WasiModule> {
         let io_ctx = unsafe {
-            ffi::WasmEdge_VMGetImportModuleContext(
+            ffi::WasmEdge_VMGetPreRegisteredModule(
                 self.inner.0,
                 ffi::WasmEdge_HostRegistration_Wasi,
             )
@@ -893,7 +893,7 @@ impl Vm {
     #[cfg(target_os = "linux")]
     pub fn wasmedge_process_module_mut(&mut self) -> WasmEdgeResult<WasmEdgeProcessModule> {
         let io_ctx = unsafe {
-            ffi::WasmEdge_VMGetImportModuleContext(
+            ffi::WasmEdge_VMGetPreRegisteredModule(
                 self.inner.0,
                 ffi::WasmEdge_HostRegistration_WasmEdge_Process,
             )
@@ -913,7 +913,7 @@ impl Vm {
     #[cfg(all(target_os = "linux", feature = "wasi_nn", target_arch = "x86_64"))]
     pub fn wasi_nn_module(&mut self) -> WasmEdgeResult<WasiNnModule> {
         let io_ctx = unsafe {
-            ffi::WasmEdge_VMGetImportModuleContext(
+            ffi::WasmEdge_VMGetPreRegisteredModule(
                 self.inner.0,
                 ffi::WasmEdge_HostRegistration_WasiNN,
             )
@@ -931,7 +931,7 @@ impl Vm {
     #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
     pub fn wasi_crypto_common_module(&mut self) -> WasmEdgeResult<WasiCryptoCommonModule> {
         let io_ctx = unsafe {
-            ffi::WasmEdge_VMGetImportModuleContext(
+            ffi::WasmEdge_VMGetPreRegisteredModule(
                 self.inner.0,
                 ffi::WasmEdge_HostRegistration_WasiCrypto_Common,
             )
@@ -953,7 +953,7 @@ impl Vm {
         &mut self,
     ) -> WasmEdgeResult<WasiCryptoAsymmetricCommonModule> {
         let io_ctx = unsafe {
-            ffi::WasmEdge_VMGetImportModuleContext(
+            ffi::WasmEdge_VMGetPreRegisteredModule(
                 self.inner.0,
                 ffi::WasmEdge_HostRegistration_WasiCrypto_AsymmetricCommon,
             )
@@ -973,7 +973,7 @@ impl Vm {
     #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
     pub fn wasi_crypto_symmetric_module(&mut self) -> WasmEdgeResult<WasiCryptoSymmetricModule> {
         let io_ctx = unsafe {
-            ffi::WasmEdge_VMGetImportModuleContext(
+            ffi::WasmEdge_VMGetPreRegisteredModule(
                 self.inner.0,
                 ffi::WasmEdge_HostRegistration_WasiCrypto_Symmetric,
             )
@@ -993,7 +993,7 @@ impl Vm {
     #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
     pub fn wasi_crypto_kx_module(&mut self) -> WasmEdgeResult<WasiCryptoKxModule> {
         let io_ctx = unsafe {
-            ffi::WasmEdge_VMGetImportModuleContext(
+            ffi::WasmEdge_VMGetPreRegisteredModule(
                 self.inner.0,
                 ffi::WasmEdge_HostRegistration_WasiCrypto_Kx,
             )
@@ -1013,7 +1013,7 @@ impl Vm {
     #[cfg(all(target_os = "linux", feature = "wasi_crypto"))]
     pub fn wasi_crypto_signatures_module(&mut self) -> WasmEdgeResult<WasiCryptoSignaturesModule> {
         let io_ctx = unsafe {
-            ffi::WasmEdge_VMGetImportModuleContext(
+            ffi::WasmEdge_VMGetPreRegisteredModule(
                 self.inner.0,
                 ffi::WasmEdge_HostRegistration_WasiCrypto_Signatures,
             )

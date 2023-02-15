@@ -1063,7 +1063,7 @@ WasmEdge provides the following built-in pre-registrations.
      * set into the configuration.
      */
     WasmEdge_ModuleInstanceContext *WasiModule =
-        WasmEdge_VMGetImportModuleContext(VMCxt,
+        WasmEdge_VMGetPreRegisteredModule(VMCxt,
                                           WasmEdge_HostRegistration_Wasi);
     /* Initialize the WASI. */
     WasmEdge_ModuleInstanceInitWASI(WasiModule, /* ... ignored */);
@@ -1092,7 +1092,7 @@ WasmEdge provides the following built-in pre-registrations.
      * set into the configuration or the plugin load failed.
      */
     WasmEdge_ModuleInstanceContext *ProcModule =
-        WasmEdge_VMGetImportModuleContext(
+        WasmEdge_VMGetPreRegisteredModule(
             VMCxt, WasmEdge_HostRegistration_WasmEdge_Process);
     /* Initialize the WasmEdge_Process. */
     WasmEdge_ModuleInstanceInitWasmEdgeProcess(ProcModule, /* ... ignored */);
@@ -1122,7 +1122,7 @@ WasmEdge provides the following built-in pre-registrations.
      * set into the configuration or the plugin load failed.
      */
     WasmEdge_ModuleInstanceContext *NNModule =
-        WasmEdge_VMGetImportModuleContext(VMCxt,
+        WasmEdge_VMGetPreRegisteredModule(VMCxt,
                                           WasmEdge_HostRegistration_WasiNN);
     WasmEdge_VMDelete(VMCxt);
     WasmEdge_ConfigureDelete(ConfCxt);
@@ -1159,7 +1159,7 @@ WasmEdge provides the following built-in pre-registrations.
      * set into the configuration or the plugin load failed.
       */
     WasmEdge_ModuleInstanceContext *CryptoCommonModule =
-        WasmEdge_VMGetImportModuleContext(
+        WasmEdge_VMGetPreRegisteredModule(
             VMCxt, WasmEdge_HostRegistration_WasiCrypto_Common);
     WasmEdge_VMDelete(VMCxt);
     WasmEdge_ConfigureDelete(ConfCxt);

@@ -553,7 +553,7 @@ Java_org_wasmedge_WasmEdgeVm_nativeGetImportModuleContext(JNIEnv *env,
                                                           jobject thisObject,
                                                           jint reg) {
   WasmEdge_VMContext *vmContext = getVmContext(env, thisObject);
-  WasmEdge_ModuleInstanceContext *imp = WasmEdge_VMGetImportModuleContext(
+  WasmEdge_ModuleInstanceContext *imp = WasmEdge_VMGetPreRegisteredModule(
       vmContext, (enum WasmEdge_HostRegistration)reg);
 
   return createJModuleInstanceContext(env, imp);

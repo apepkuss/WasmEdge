@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
   /* Init WASI. */
   const char *Preopens[] = {".:."};
   const char *Args[] = {argv[1], argv[2], argv[3]};
-  WasmEdge_ModuleInstanceContext *WASIImpObj = WasmEdge_VMGetImportModuleContext(VMCxt, WasmEdge_HostRegistration_Wasi);
+  WasmEdge_ModuleInstanceContext *WASIImpObj = WasmEdge_VMGetPreRegisteredModule(VMCxt, WasmEdge_HostRegistration_Wasi);
   WasmEdge_ModuleInstanceInitWASI(WASIImpObj, Args, 3, NULL, 0, Preopens, 1);
 
   /* Run WASM file. */

@@ -24,7 +24,7 @@ int main(int argc, const char *const argv[]) {
 
   /* Set the envs and args. */
   WasmEdge_ModuleInstanceContext *WasiCxt =
-      WasmEdge_VMGetImportModuleContext(VMCxt, WasmEdge_HostRegistration_Wasi);
+      WasmEdge_VMGetPreRegisteredModule(VMCxt, WasmEdge_HostRegistration_Wasi);
   WasmEdge_ModuleInstanceInitWASI(WasiCxt, argv, argc, Envs, 3, NULL, 0);
 
   /* Instantiate the WASM file. */
