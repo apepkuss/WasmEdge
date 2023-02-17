@@ -198,7 +198,7 @@ jobs:
           $env:Path="$env:Path;C:\Users\runneradmin\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin;D:\a\WasmEdge\WasmEdge\build\lib\api"
           cd bindings\rust
           cargo test --workspace --features aot,async --locked
-          cargo test --examples --features aot,async --locked
+          cargo test --examples --features aot,async --locked -- --nocapture
 
   build_fedora:
     name: Fedora 37
