@@ -53,9 +53,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("fib(5): {}", res[0].to_i32());
 
         // remove the generated aot file
-        if aot_file_path.exists() {
-            std::fs::remove_file(&aot_file_path)?;
-        }
+        let result = std::fs::remove_file(&aot_file_path);
+        println!("remove aot file: {:?}", result);
     }
 
     Ok(())
