@@ -41,7 +41,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
         assert!(aot_file_path.ends_with("example_aot_fibonacci.so"));
         #[cfg(target_os = "windows")]
-        assert!(aot_file_path.ends_with("example_aot_fibonacci.dll"));
+        assert!(
+            aot_file_path.ends_with("example_aot_fibonacci.dll"),
+            "Not found {}",
+            aot_file_path.display()
+        );
 
         let mut vm = Vm::new(Some(config), None)?;
 
