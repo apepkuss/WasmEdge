@@ -168,3 +168,8 @@ pub trait Engine {
         params: impl IntoIterator<Item = WasmValue>,
     ) -> WasmEdgeResult<Vec<WasmValue>>;
 }
+
+lazy_static! {
+    static ref SIG_ENV: Mutex<std::mem::MaybeUninit<setjmp::sigjmp_buf>> =
+        Mutex::new(std::mem::MaybeUninit::uninit());
+}

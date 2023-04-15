@@ -433,6 +433,38 @@ impl Vm {
         }
     }
 
+    #[cfg(feature = "async")]
+    pub async fn run_func_with_timeout(
+        &self,
+        mod_name: Option<&str>,
+        func_name: impl AsRef<str> + Send,
+        args: impl IntoIterator<Item = WasmValue> + Send,
+        seconds: u32,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        match mod_name {
+            Some(mod_name) => match self.named_instances.get(mod_name) {
+                Some(named_instance) => {
+                    named_instance
+                        .func(func_name.as_ref())?
+                        .run_with_timeout(self.executor(), args, seconds)
+                        .await
+                }
+                None => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundModule(
+                    mod_name.into(),
+                )))),
+            },
+            None => match self.active_instance.as_ref() {
+                Some(active_instance) => {
+                    active_instance
+                        .func(func_name.as_ref())?
+                        .run_with_timeout(self.executor(), args, seconds)
+                        .await
+                }
+                None => Err(Box::new(WasmEdgeError::Vm(VmError::NotFoundActiveModule))),
+            },
+        }
+    }
+
     /// Runs an exported wasm function from the given [wasm module](crate::Module).
     ///
     /// This method is a shortcut of calling `register_module` and `run_func` in sequence.

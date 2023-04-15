@@ -23,7 +23,7 @@ wat = "1.0"
 [features]
 aot = ["wasmedge-sys/aot"]
 async = ["wasmedge-sys/async"]
-default = []
+default = ["async"]
 ffi = ["wasmedge-sys/ffi"]
 standalone = ["wasmedge-sys/standalone"]
 static = ["wasmedge-sys/static"]

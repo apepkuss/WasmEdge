@@ -253,6 +253,52 @@ impl Executor {
             .unwrap()
     }
 
+    #[cfg(feature = "async")]
+    pub async fn call_func_with_timeout(
+        &self,
+        func: &Function,
+        params: impl IntoIterator<Item = WasmValue> + Send,
+        seconds: u32,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        unsafe {
+            // set signal
+            libc::signal(libc::SIGALRM, Self::get_handler());
+            // set alarm
+            libc::alarm(seconds);
+        }
+
+        let ret_val = unsafe {
+            let mut sig_env = crate::SIG_ENV.lock();
+            setjmp::sigsetjmp(sig_env.as_mut_ptr(), 1)
+        };
+
+        match ret_val {
+            0 => {
+                dbg!("call func");
+                FiberFuture::on_fiber(|| self.call_func(func, params))
+                    .await
+                    .unwrap()
+            }
+            _ => {
+                dbg!("timeout");
+
+                panic!("Timeout!")
+            }
+        }
+    }
+
+    #[cfg(feature = "async")]
+    fn get_handler() -> libc::sighandler_t {
+        Self::sig_handler as *mut libc::c_void as libc::sighandler_t
+    }
+
+    #[cfg(feature = "async")]
+    fn sig_handler() {
+        println!("pid: {}", std::process::id());
+        let mut sig_env = crate::SIG_ENV.lock();
+        unsafe { setjmp::siglongjmp(sig_env.as_mut_ptr(), 1) };
+    }
+
     /// Runs a host function reference instance and returns the results.
     ///
     /// # Arguments

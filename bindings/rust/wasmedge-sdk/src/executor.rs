@@ -76,6 +76,18 @@ impl Executor {
         self.inner.call_func_async(&func.inner, params).await
     }
 
+    #[cfg(feature = "async")]
+    pub async fn run_func_with_timeout(
+        &self,
+        func: &Func,
+        params: impl IntoIterator<Item = WasmValue> + Send,
+        seconds: u32,
+    ) -> WasmEdgeResult<Vec<WasmValue>> {
+        self.inner
+            .call_func_with_timeout(&func.inner, params, seconds)
+            .await
+    }
+
     /// Runs a host function reference instance and returns the results.
     ///
     /// # Arguments
