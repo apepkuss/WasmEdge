@@ -471,3 +471,128 @@ fn sys_expand_async_host_func_with_two_args(item_fn: &syn::ItemFn) -> proc_macro
 
     ret
 }
+
+#[proc_macro_attribute]
+pub fn sys_async_host_function_new(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let body_ast = parse_macro_input!(item as Item);
+    if let Item::Fn(item_fn) = body_ast {
+        match sys_expand_async_host_func_new(&item_fn) {
+            Ok(token_stream) => token_stream.into(),
+            Err(err) => err.to_compile_error().into(),
+        }
+    } else {
+        TokenStream::new()
+    }
+}
+
+fn sys_expand_async_host_func_new(item_fn: &syn::ItemFn) -> syn::Result<proc_macro2::TokenStream> {
+    // extract T from Option<&mut T>
+    let ret = match &item_fn.sig.inputs.len() {
+        2 => sys_expand_async_host_func_with_two_args_new(item_fn),
+        3 => sys_expand_async_host_func_with_three_args_new(item_fn),
+        _ => panic!("Invalid numbers of host function arguments"),
+    };
+
+    Ok(ret)
+}
+
+fn sys_expand_async_host_func_with_two_args_new(item_fn: &syn::ItemFn) -> proc_macro2::TokenStream {
+    let fn_name_ident = &item_fn.sig.ident;
+    let fn_visibility = &item_fn.vis;
+
+    // insert the third argument
+    let mut fn_inputs = item_fn.sig.inputs.clone();
+    fn_inputs.push(parse_quote!(_data: *mut std::os::raw::c_void));
+
+    let fn_block = &item_fn.block;
+
+    let ret = quote!(
+        #fn_visibility fn #fn_name_ident (#fn_inputs) -> Box<(dyn std::future::Future<Output = Result<Vec<WasmValue>, HostFuncError>> + Send + 'static)> {
+            Box::new(async move {
+                #fn_block
+            })
+        }
+    );
+
+    ret
+}
+
+fn sys_expand_async_host_func_with_three_args_new(
+    item_fn: &syn::ItemFn,
+) -> proc_macro2::TokenStream {
+    let fn_name_ident = &item_fn.sig.ident;
+    let fn_visibility = &item_fn.vis;
+
+    let data_arg = item_fn.sig.inputs.last().unwrap().clone();
+    let ty_ptr = match &data_arg {
+        FnArg::Typed(PatType { ref ty, .. }) => match **ty {
+            syn::Type::Reference(syn::TypeReference { ref elem, .. }) => syn::TypePtr {
+                star_token: parse_quote!(*),
+                const_token: None,
+                mutability: Some(parse_quote!(mut)),
+                elem: elem.clone(),
+            },
+            syn::Type::Path(syn::TypePath { ref path, .. }) => match path.segments.last() {
+                Some(segment) => {
+                    let id = segment.ident.to_string();
+                    match id == "Option" {
+                        true => match segment.arguments {
+                            syn::PathArguments::AngleBracketed(
+                                syn::AngleBracketedGenericArguments { ref args, .. },
+                            ) => {
+                                let last_generic_arg = args.last();
+                                match last_generic_arg {
+                                    Some(arg) => match arg {
+                                        syn::GenericArgument::Type(ty) => match ty {
+                                            syn::Type::Reference(syn::TypeReference {
+                                                ref elem,
+                                                ..
+                                            }) => syn::TypePtr {
+                                                star_token: parse_quote!(*),
+                                                const_token: None,
+                                                mutability: Some(parse_quote!(mut)),
+                                                elem: elem.clone(),
+                                            },
+                                            _ => panic!("Not found syn::Type::Reference"),
+                                        },
+                                        _ => {
+                                            panic!("Not found syn::GenericArgument::Type")
+                                        }
+                                    },
+                                    None => panic!("Not found the last GenericArgument"),
+                                }
+                            }
+                            _ => panic!("Not found syn::PathArguments::AngleBracketed"),
+                        },
+                        false => panic!("Not found segment ident: Option"),
+                    }
+                }
+                None => panic!("Not found path segments"),
+            },
+            _ => panic!("Unsupported syn::Type type"),
+        },
+        _ => panic!("Unsupported syn::FnArg type"),
+    };
+
+    // insert the third argument
+    let mut fn_inputs = item_fn.sig.inputs.clone();
+    fn_inputs.pop();
+    fn_inputs.push(parse_quote!(data: *mut std::os::raw::c_void));
+
+    let mut fn_block = item_fn.block.clone();
+    let fn_block_mut = fn_block.as_mut();
+    fn_block_mut.stmts.insert(
+        0,
+        parse_quote!(let data = unsafe { &mut *(data as #ty_ptr) };),
+    );
+
+    let ret = quote!(
+        #fn_visibility fn #fn_name_ident (#fn_inputs) -> Box<(dyn std::future::Future<Output = Result<Vec<WasmValue>, HostFuncError>> + Send + 'static)> {
+            Box::new(async move {
+                #fn_block
+            })
+        }
+    );
+
+    ret
+}
