@@ -52,7 +52,10 @@ jobs:
 
   build_ubuntu_2004:
     name: Ubuntu-20.04
-    runs-on: ubuntu-20.04
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04]
 
     steps:
       - uses: actions/checkout@v3
@@ -62,9 +65,23 @@ jobs:
       - name: Build WasmEdge with Release mode
         run: |
           sudo apt-get update
-          sudo apt-get install -y software-properties-common libboost-all-dev llvm-14-dev liblld-14-dev ninja-build gcc g++ clang-14
+          # sudo apt-get install -y software-properties-common libboost-all-dev llvm-14-dev liblld-14-dev ninja-build gcc g++ clang-14
+          sudo apt-get install -y software-properties-common libboost-all-dev ninja-build gcc g++
+          if [ ${{ matrix.os }} == "ubuntu-20.04" ]; then
+            sudo apt-get install -y llvm-12-dev liblld-12-dev clang-12
+          else
+            sudo apt-get install -y llvm-14-dev liblld-14-dev clang-14
+          fi
           cmake -Bbuild -GNinja -DCMAKE_BUILD_TYPE=Release -DWASMEDGE_PLUGIN_PROCESS=On .
           cmake --build build
+      
+      # - name: Install llvm and clang
+      #   run: |
+      #     if [ ${{ matrix.os }} == "ubuntu-20.04" ]; then
+      #       sudo apt-get install -y llvm-12-dev liblld-12-dev clang-12
+      #     else
+      #       sudo apt-get install -y llvm-14-dev liblld-14-dev clang-14
+      #     fi
   
       - name: Install Rust v1.68
         uses: dtolnay/rust-toolchain@stable
