@@ -9,12 +9,14 @@
 //! ```
 
 #[cfg(feature = "async")]
-use wasmedge_sys::{Executor, FuncType, Function};
+use wasmedge_sys::{r#async::AsyncState, Executor, FuncType, Function};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "async")]
     {
+        let async_state = AsyncState::new();
+
         // create a FuncType
         let func_ty = FuncType::create(vec![], vec![])?;
 
@@ -44,7 +46,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // run this function
         let mut executor = Executor::create(None, None)?;
 
-        async_host_func.call_async(&mut executor, vec![]).await?;
+        async_host_func
+            .call_async(&async_state, &mut executor, vec![])
+            .await?;
     }
 
     Ok(())
