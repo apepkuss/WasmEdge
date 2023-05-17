@@ -2,7 +2,7 @@
 
 use super::ffi;
 #[cfg(feature = "async")]
-use crate::r#async::FiberFuture;
+use crate::r#async::{AsyncState, FiberFuture};
 use crate::{
     error::WasmEdgeError, instance::module::InnerInstance, types::WasmEdgeString, utils::check,
     Config, Engine, FuncRef, Function, ImportObject, Instance, Module, Statistics, Store,
@@ -252,10 +252,11 @@ impl Executor {
     #[cfg(feature = "async")]
     pub async fn call_func_async(
         &self,
+        async_state: &AsyncState,
         func: &Function,
         params: impl IntoIterator<Item = WasmValue> + Send,
     ) -> WasmEdgeResult<Vec<WasmValue>> {
-        FiberFuture::on_fiber(|| self.call_func(func, params))
+        FiberFuture::on_fiber(async_state, || self.call_func(func, params))
             .await
             .unwrap()
     }
@@ -312,10 +313,11 @@ impl Executor {
     #[cfg(feature = "async")]
     pub async fn call_func_ref_async(
         &self,
+        async_state: &AsyncState,
         func_ref: &FuncRef,
         params: impl IntoIterator<Item = WasmValue> + Send,
     ) -> WasmEdgeResult<Vec<WasmValue>> {
-        FiberFuture::on_fiber(|| self.call_func_ref(func_ref, params))
+        FiberFuture::on_fiber(async_state, || self.call_func_ref(func_ref, params))
             .await
             .unwrap()
     }
