@@ -9,6 +9,7 @@ on:
     branches:
       - master
       - "rust/*"
+      - sdk-0.8.1-plus
     paths:
       - ".github/workflows/bindings-rust.yml"
       - "bindings/rust/**"
