@@ -360,12 +360,12 @@ pub struct ImportModule {
 }
 impl Drop for ImportModule {
     fn drop(&mut self) {
-        dbg!("ImportModule::drop");
-        dbg!(self.registered);
+        // dbg!("ImportModule::drop");
+        // dbg!(self.registered);
 
         if !self.registered && Arc::strong_count(&self.inner) == 1 && !self.inner.0.is_null() {
-            dbg!(">>> start drop ImportModule's funcs");
-            dbg!(HOST_FUNCS.read().len());
+            // dbg!(">>> start drop ImportModule's funcs");
+            // dbg!(HOST_FUNCS.read().len());
 
             for name in self.func_names.iter() {
                 let f = self
@@ -377,20 +377,20 @@ impl Drop for ImportModule {
                 if let Some(key) = HOST_FUNC_FOOTPRINTS.lock().remove(&footprint) {
                     let mut map_host_func = HOST_FUNCS.write();
                     map_host_func.remove(&key);
-                    dbg!("removed key: {}", &key);
+                    // dbg!("removed key: {}", &key);
                 }
             }
 
-            dbg!(HOST_FUNCS.read().len());
-            dbg!("<<< dropped ImportModule's funcs");
+            // dbg!(HOST_FUNCS.read().len());
+            // dbg!("<<< dropped ImportModule's funcs");
 
-            dbg!("start dropping ImportModule");
+            // dbg!("start dropping ImportModule");
 
             unsafe {
                 ffi::WasmEdge_ModuleInstanceDelete(self.inner.0);
             }
 
-            dbg!("finish dropping ImportModule");
+            // dbg!("finish dropping ImportModule");
         }
     }
 }

@@ -509,11 +509,11 @@ impl Function {
 }
 impl Drop for Function {
     fn drop(&mut self) {
-        dbg!("Function::drop");
-        dbg!(self.registered);
+        // dbg!("Function::drop");
+        // dbg!(self.registered);
 
         if !self.registered && Arc::strong_count(&self.inner) == 1 && !self.inner.0.is_null() {
-            dbg!("start dropping Function");
+            // dbg!("start dropping Function");
 
             // remove the real_func from HOST_FUNCS
             let footprint = self.inner.0 as usize;
@@ -524,7 +524,7 @@ impl Drop for Function {
             // delete the function instance
             unsafe { ffi::WasmEdge_FunctionInstanceDelete(self.inner.0) };
 
-            dbg!("finish dropping Function");
+            // dbg!("finish dropping Function");
         }
     }
 }
@@ -643,15 +643,15 @@ impl FuncType {
 }
 impl Drop for FuncType {
     fn drop(&mut self) {
-        dbg!("FuncType::drop");
-        dbg!(self.registered);
+        // dbg!("FuncType::drop");
+        // dbg!(self.registered);
 
         if !self.registered && !self.inner.0.is_null() {
-            dbg!("start dropping FuncType");
+            // dbg!("start dropping FuncType");
 
             unsafe { ffi::WasmEdge_FunctionTypeDelete(self.inner.0) };
 
-            dbg!("finish dropping FuncType");
+            // dbg!("finish dropping FuncType");
         }
     }
 }
