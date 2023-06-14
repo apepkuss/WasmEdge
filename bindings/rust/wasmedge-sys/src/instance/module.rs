@@ -373,7 +373,7 @@ impl Drop for ImportModule {
                     .expect("[wasmedge-sys] Not found host function named '{name}'");
 
                 // remove the real_func from HOST_FUNCS
-                let footprint = f.inner.0 as usize as usize;
+                let footprint = f.inner.0 as usize;
                 if let Some(key) = HOST_FUNC_FOOTPRINTS.lock().remove(&footprint) {
                     let mut map_host_func = HOST_FUNCS.write();
                     map_host_func.remove(&key);
