@@ -509,7 +509,12 @@ impl Function {
 }
 impl Drop for Function {
     fn drop(&mut self) {
+        dbg!("Function::drop");
+        dbg!(self.registered);
+
         if !self.registered && Arc::strong_count(&self.inner) == 1 && !self.inner.0.is_null() {
+            dbg!("start dropping Function");
+
             // remove the real_func from HOST_FUNCS
             let footprint = self.inner.0 as usize;
             if let Some(key) = HOST_FUNC_FOOTPRINTS.lock().remove(&footprint) {
@@ -518,6 +523,8 @@ impl Drop for Function {
             }
             // delete the function instance
             unsafe { ffi::WasmEdge_FunctionInstanceDelete(self.inner.0) };
+
+            dbg!("finish dropping Function");
         }
     }
 }
@@ -636,8 +643,15 @@ impl FuncType {
 }
 impl Drop for FuncType {
     fn drop(&mut self) {
+        dbg!("FuncType::drop");
+        dbg!(self.registered);
+
         if !self.registered && !self.inner.0.is_null() {
+            dbg!("start dropping FuncType");
+
             unsafe { ffi::WasmEdge_FunctionTypeDelete(self.inner.0) };
+
+            dbg!("finish dropping FuncType");
         }
     }
 }
@@ -743,7 +757,7 @@ unsafe impl Sync for InnerFuncRef {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{types::WasmValue, Executor, HOST_FUNCS};
+    use crate::{types::WasmValue, AsImport, Executor, ImportModule, HOST_FUNCS};
     use std::{
         sync::{Arc, Mutex},
         thread,
@@ -1186,5 +1200,25 @@ mod tests {
             HOST_FUNCS.read().len() - start_num,
             start_num
         );
+    }
+
+    #[test]
+    fn test_func_drop() {
+        let host_name = "extern";
+
+        // create an import module
+        let result = ImportModule::create(host_name);
+        assert!(result.is_ok());
+        let mut import = result.unwrap();
+
+        // create a host function
+        let result = FuncType::create([ValType::ExternRef, ValType::I32], [ValType::I32]);
+        assert!(result.is_ok());
+        let func_ty = result.unwrap();
+        let result = Function::create(&func_ty, Box::new(real_add), 0);
+        assert!(result.is_ok());
+        let host_func = result.unwrap();
+        // add the host function
+        import.add_func("func-add", host_func);
     }
 }
