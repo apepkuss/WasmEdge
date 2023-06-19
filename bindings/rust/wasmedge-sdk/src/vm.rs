@@ -149,7 +149,12 @@ impl VmBuilder {
 
         // * load and register plugin instances
         for (pname, mname) in self.plugins.iter() {
+            // dbg!(pname);
+            // dbg!(mname);
+
             if let Some(instance) = Self::create_plugin_instance(pname, mname) {
+                // dbg!(&instance);
+
                 vm.plugin_host_instances.push(instance);
                 vm.executor.inner.register_plugin_instance(
                     &mut vm.store.inner,
@@ -164,7 +169,14 @@ impl VmBuilder {
     fn create_plugin_instance(pname: impl AsRef<str>, mname: impl AsRef<str>) -> Option<Instance> {
         match crate::plugin::PluginManager::find(pname.as_ref()) {
             Some(plugin) => plugin.mod_instance(mname.as_ref()),
-            None => None,
+            None => {
+                println!(
+                    "[wasmedge-sdk] failed to find plugin: {}::{}",
+                    pname.as_ref(),
+                    mname.as_ref()
+                );
+                None
+            }
         }
     }
 }
