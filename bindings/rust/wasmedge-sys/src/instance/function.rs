@@ -514,6 +514,8 @@ impl Drop for Function {
 
         if !self.registered && Arc::strong_count(&self.inner) == 1 && !self.inner.0.is_null() {
             // dbg!("start dropping Function");
+            // dbg!(HOST_FUNCS.read().len());
+            // dbg!(HOST_FUNC_FOOTPRINTS.lock().len());
 
             // remove the real_func from HOST_FUNCS
             let footprint = self.inner.0 as usize;
@@ -525,6 +527,8 @@ impl Drop for Function {
             unsafe { ffi::WasmEdge_FunctionInstanceDelete(self.inner.0) };
 
             // dbg!("finish dropping Function");
+            // dbg!(HOST_FUNCS.read().len());
+            // dbg!(HOST_FUNC_FOOTPRINTS.lock().len());
         }
     }
 }

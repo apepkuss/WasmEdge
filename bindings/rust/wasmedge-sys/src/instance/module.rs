@@ -17,10 +17,18 @@ pub struct Instance {
 }
 impl Drop for Instance {
     fn drop(&mut self) {
+        // dbg!("Instance::drop");
+        // dbg!(self.registered);
+        // dbg!(self.name());
+
         if !self.registered && Arc::strong_count(&self.inner) == 1 && !self.inner.0.is_null() {
+            // dbg!("start dropping Instance");
+
             unsafe {
                 ffi::WasmEdge_ModuleInstanceDelete(self.inner.0);
             }
+
+            // dbg!("finish dropping Instance");
         }
     }
 }
