@@ -393,7 +393,7 @@ install() {
 
 get_wasmedge_release() {
 	info "Fetching WasmEdge-$VERSION"
-	_downloader "https://github.com/WasmEdge/WasmEdge/releases/download/$VERSION/WasmEdge-$VERSION-$RELEASE_PKG"
+	_downloader "https://mirror.ghproxy.com/https://github.com/WasmEdge/WasmEdge/releases/download/$VERSION/WasmEdge-$VERSION-$RELEASE_PKG"
 	_extractor -C "${TMP_DIR}" -vxzf "$TMP_DIR/WasmEdge-$VERSION-$RELEASE_PKG"
 }
 
@@ -431,10 +431,10 @@ get_wasmedge_ggml_plugin() {
 
 	if [ "$GGML_BUILD_NUMBER" == "" ]; then
 		info "Use default GGML plugin"
-		_downloader "https://github.com/WasmEdge/WasmEdge/releases/download/$VERSION/WasmEdge-plugin-wasi_nn-ggml${CUDA_EXT}${NOAVX_EXT}-$VERSION-$RELEASE_PKG"
+		_downloader "https://mirror.ghproxy.com/https://github.com/WasmEdge/WasmEdge/releases/download/$VERSION/WasmEdge-plugin-wasi_nn-ggml${CUDA_EXT}${NOAVX_EXT}-$VERSION-$RELEASE_PKG"
 	else
 		info "Use ${GGML_BUILD_NUMBER} GGML plugin"
-		_downloader "https://github.com/second-state/WASI-NN-GGML-PLUGIN-REGISTRY/raw/main/${VERSION}/${GGML_BUILD_NUMBER}/WasmEdge-plugin-wasi_nn-ggml${CUDA_EXT}${NOAVX_EXT}-$VERSION-$RELEASE_PKG"
+		_downloader "https://mirror.ghproxy.com/https://github.com/second-state/WASI-NN-GGML-PLUGIN-REGISTRY/raw/main/${VERSION}/${GGML_BUILD_NUMBER}/WasmEdge-plugin-wasi_nn-ggml${CUDA_EXT}${NOAVX_EXT}-$VERSION-$RELEASE_PKG"
 	fi
 
 	local TMP_PLUGIN_DIR="${TMP_DIR}/${IPKG}/plugin"
@@ -444,7 +444,7 @@ get_wasmedge_ggml_plugin() {
 
 get_wasmedge_wasi_logging_plugin() {
 	info "Fetching WASI-Logging-Plugin"
-	_downloader "https://github.com/WasmEdge/WasmEdge/releases/download/$VERSION/WasmEdge-plugin-wasi_logging-$VERSION-$RELEASE_PKG"
+	_downloader "https://mirror.ghproxy.com/https://github.com/WasmEdge/WasmEdge/releases/download/$VERSION/WasmEdge-plugin-wasi_logging-$VERSION-$RELEASE_PKG"
 	local TMP_PLUGIN_DIR="${TMP_DIR}/${IPKG}/plugin"
 	mkdir -p "${TMP_PLUGIN_DIR}"
 	_extractor -C "${TMP_PLUGIN_DIR}" -vxzf "${TMP_DIR}/WasmEdge-plugin-wasi_logging-${VERSION}-${RELEASE_PKG}"
